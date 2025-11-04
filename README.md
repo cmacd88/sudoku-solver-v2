@@ -2,6 +2,10 @@
 
 A high-performance Sudoku solver written in Rust, featuring constraint propagation with zero-cost view abstractions.
 
+**NB! I don't really know Rust as a language, so this is a way to test how well AI LLMs can implement my own ideas.
+This was vibe coded with blackbox ai, and currently is missing some features because I ran out of credits before I could have it implement everything.
+So far it covers a lot of puzzles, but gets very confused when there are multiple solutions to the same problem.**
+
 ## Features (MVP)
 
 - ✅ **View Abstractions**: Zero-cost access to constraint groups (rows, columns, boxes)
