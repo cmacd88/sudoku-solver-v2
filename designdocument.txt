@@ -1,0 +1,25 @@
+This is a design document for a Sudoku solver application.
+
+Practical details:
+- Language - Rust, for memory safe zero cost abstractions.
+- A modular design, with separate components for board representation, solving algorithms, and user interface, etc.
+- The core idea is to use constraint propagation to reduce search space, applying strategies from a strategy bank.
+- The strategy bank should read files from a directory, parse them, and the files should be json objects.
+- The strategy object files should contain metadata and instructions for implementing.
+- Strategies like x-wing, naked pair, etc can be among these files.
+- There should also be a comprehensive logging solution, to help with debugging and understanding the solving process, and train the algorithm for selecting strategies. like a mini machine learning project.
+- The application should be able to load puzzles from files, solve them, and output the solution along with a log of the solving steps.
+- The core program is a simple CLI interface, but it should at all times keep a board state that could be rendered by piping output to a visualizer.
+- The visualizer component should be decoupled from the solver, communicating through a well-defined interface or data stream.
+- Consider using a library like `serde` for serialization and deserialization of strategy files and puzzle data.
+- Each cell is represented by it's possible values. The goal is not to solve the cells, but to whittle away candidates until there is only one.
+- The solver can also use a bitmask to track board state, simply solved or not solved cells. This can help with performance and picking the areas of interest.
+- We could easily compute which cells are most constrained and prioritize those for solving, potentially reducing the overall search space significantly.
+  Not to mention areas we should try to solve, to gain the most information to whittle down the most for other candidates.
+- If a stalemate situation appears where constraint propagation is no longer effective, instead of backtracking, we should consider another approach where we use something like speculative execution to see if we can solve each outcome separately for a while until we can prune the ones that don't work.
+- The application should also support different difficulty levels, which can be achieved by controlling the complexity of the strategies allowed and the number of initial clues provided in the puzzle. This allows for a scalable difficulty system that can cater to both beginners and advanced players.
+- We should also be able to work with boards other than 9x9 cell, 3x3grid layouts. For example, 6x6 with 2x3 subgrids, or even larger variants. This requires the core logic to be flexible and parameterized over board dimensions. The strategy bank should also support dimension-specific strategies or have generic implementations that adapt to different sizes.
+- To calculate whether a strategy is applicable, we can implement a pattern matching system that checks the current board state against the conditions defined in each strategy's JSON file. This system would iterate through available strategies, evaluate their preconditions, and apply those that match, updating the board state accordingly. The pattern matcher should be efficient and capable of handling complex logical conditions to ensure that only valid and useful strategies are applied at each step.- The application should also support different difficulty levels, which can be achieved by controlling the complexity of the strategies allowed and the number of initial clues provided in the puzzle. This allows for a scalable difficulty system that can cater to both beginners and advanced players.
+- Certain strategies won't work on certain boards. For example, only perfect squares can have the same subgrid dimensions (e.g., 9x9 with 3x3 grids).
+- The ultimate goal is to solve sudoku puzzles as quickly as possible. Logging/debugging etc should therefore be toggled on or off as needed.
+- Performance profiling should be built into the application to identify bottlenecks in the solving process, especially when dealing
