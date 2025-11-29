@@ -7,9 +7,12 @@ A high-performance Sudoku solver written in Rust, featuring constraint propagati
 - ✅ **View Abstractions**: Zero-cost access to constraint groups (rows, columns, boxes)
 - ✅ **Constraint Propagation**: Efficient candidate elimination using pre-computed views
 - ✅ **Bitset Candidates**: Fast set operations using bitwise operations
-- ✅ **Basic Strategies**: Naked singles and hidden singles
+- ✅ **JSON Strategy System**: Load and apply strategies from JSON files
+- ✅ **Multiple Strategies**: Naked singles, hidden singles, naked pairs, pointing pairs
+- ✅ **Strategy Selection**: Multiple policies (Priority, Difficulty, FirstMatch)
 - ✅ **CLI Interface**: Simple command-line interface for solving puzzles
 - ✅ **Validation**: Detects contradictions and validates board state
+- ✅ **Comprehensive Testing**: 71 tests covering all functionality
 
 ## Architecture Highlights
 
@@ -94,25 +97,84 @@ sudoku-solver-v2/
 │   ├── solver/
 │   │   └── mod.rs           # Constraint propagation solver
 │   ├── strategy/
-│   │   └── mod.rs           # Strategy system (placeholder)
+│   │   ├── mod.rs           # Strategy system exports
+│   │   ├── types.rs         # Strategy type definitions
+│   │   ├── bank.rs          # Strategy loading and management
+│   │   ├── matcher.rs       # Pattern matching implementations
+│   │   └── selector.rs      # Strategy selection logic
 │   └── io/
 │       └── mod.rs           # Puzzle loading and formatting
+├── strategies/              # JSON strategy definitions
+│   ├── README.md            # Strategy documentation
+│   ├── basic/
+│   │   ├── naked_single.json
+│   │   └── hidden_single.json
+│   └── intermediate/
+│       ├── naked_pair.json
+│       └── pointing_pair.json
 ├── tests/
-│   └── integration_test.rs  # Integration tests
+│   ├── integration_test.rs      # Integration tests
+│   ├── edge_cases_test.rs       # Edge case tests
+│   └── strategy_system_test.rs  # Strategy system tests
 ├── puzzles/
 │   ├── easy1.txt
-│   └── easy2.txt
+│   ├── easy2.txt
+│   └── hard1.txt
 └── Cargo.toml
 ```
 
-## Current Limitations (MVP)
+## JSON Strategy System
+
+The solver now includes a flexible JSON-based strategy system that allows defining solving strategies in JSON files without code changes.
+
+### Strategy Files
+
+Strategies are organized in the `strategies/` directory:
+
+```
+strategies/
+├── basic/
+│   ├── naked_single.json      # Cells with one candidate
+│   └── hidden_single.json     # Values with one position
+└── intermediate/
+    ├── naked_pair.json        # Two cells, same two candidates
+    └── pointing_pair.json     # Candidates pointing to a line
+```
+
+### Using Strategies
+
+```rust
+use sudoku_solver_v2::strategy::{StrategyBank, StrategySelector, SelectionPolicy};
+
+// Load strategies from directory
+let bank = StrategyBank::load_from_directory("strategies")?;
+
+// Create a selector with a policy
+let mut selector = StrategySelector::new(SelectionPolicy::Priority);
+
+// Select and apply strategies
+if let Some((strategy, matches)) = selector.select_strategy(&board, bank.get_all_strategies()) {
+    for strategy_match in matches {
+        selector.apply_match(&mut board, &strategy_match)?;
+    }
+}
+
+// View statistics
+let stats = selector.statistics();
+println!("Total applications: {}", stats.total_applications());
+```
+
+### Adding New Strategies
+
+See `strategies/README.md` for detailed documentation on creating new strategy JSON files.
+
+## Current Limitations
 
 - Only supports 9x9 boards (hardcoded)
-- Limited to basic strategies (naked singles, hidden singles)
-- No JSON strategy loading yet
+- ~~No JSON strategy loading~~ ✅ **Implemented**
 - No logging system
 - No speculative execution for hard puzzles
-- No advanced strategies (X-Wing, Swordfish, etc.)
+- Limited to basic/intermediate strategies (no X-Wing, Swordfish, etc. yet)
 
 ## Future Enhancements
 
