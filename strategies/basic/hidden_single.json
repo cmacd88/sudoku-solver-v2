@@ -1,0 +1,22 @@
+{
+  "name": "hidden_single",
+  "difficulty": 2,
+  "description": "A value that can only go in one cell within a unit must be placed there",
+  "applicable_dimensions": ["9x9", "6x6", "16x16"],
+  "pattern": {
+    "type": "cell_group",
+    "unit_type": ["row", "column", "box"],
+    "conditions": [
+      {
+        "type": "value_occurrences",
+        "count": 1
+      }
+    ]
+  },
+  "action": {
+    "type": "set_cell_value",
+    "target": "matched_cells",
+    "value": "matched_candidates"
+  },
+  "priority": 90
+}

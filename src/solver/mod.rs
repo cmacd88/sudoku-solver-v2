@@ -85,7 +85,7 @@ impl Solver {
     }
     
     /// Propagates constraints from initial clues
-    fn propagate_initial_constraints(&self, board: &mut Board) -> SolverResult<()> {
+    pub fn propagate_initial_constraints(&self, board: &mut Board) -> SolverResult<()> {
         let mut queue = VecDeque::new();
         
         // Add all initially solved cells to the queue

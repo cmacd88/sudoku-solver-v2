@@ -1,0 +1,23 @@
+{
+  "name": "pointing_pair",
+  "difficulty": 4,
+  "description": "Candidates restricted to a line within a box eliminate candidates in that line outside the box",
+  "applicable_dimensions": ["9x9", "6x6", "16x16"],
+  "pattern": {
+    "type": "pointing_candidates",
+    "source_unit": "box",
+    "target_unit": "row",
+    "conditions": [
+      {
+        "type": "restricted_to_line",
+        "value": true
+      }
+    ]
+  },
+  "action": {
+    "type": "eliminate_candidates",
+    "target": "cells_in_target_unit",
+    "candidates": "matched_candidates"
+  },
+  "priority": 60
+}

@@ -1,0 +1,35 @@
+{
+  "name": "swordfish",
+  "difficulty": 8,
+  "description": "When a candidate appears in exactly 2-3 positions in 3 parallel units (rows or columns), and these positions align, eliminate that candidate from the perpendicular units at those positions",
+  "applicable_dimensions": ["9x9", "16x16"],
+  "pattern": {
+    "type": "cross_unit",
+    "unit_type": ["row", "column"],
+    "conditions": [
+      {
+        "type": "parallel_unit_count",
+        "count": 3
+      },
+      {
+        "type": "positions_per_unit",
+        "min": 2,
+        "max": 3
+      },
+      {
+        "type": "aligned_positions",
+        "value": true
+      },
+      {
+        "type": "same_candidate",
+        "value": true
+      }
+    ]
+  },
+  "action": {
+    "type": "eliminate_candidates",
+    "target": "perpendicular_units",
+    "candidates": "matched_candidates"
+  },
+  "priority": 30
+}
