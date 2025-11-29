@@ -16,19 +16,19 @@ use std::fmt;
 pub struct Board {
     /// All cells in the board (81 cells for 9x9)
     cells: Vec<Cell>,
-    
+
     /// Pre-computed row views (9 rows)
     rows: Vec<RowView>,
-    
+
     /// Pre-computed column views (9 columns)
     columns: Vec<ColumnView>,
-    
+
     /// Pre-computed box views (9 boxes)
     boxes: Vec<BoxView>,
-    
+
     /// Pre-computed constraints for each cell
     cell_constraints: Vec<CellConstraints>,
-    
+
     /// Bitmask tracking which cells are solved (for quick checks)
     solved_mask: u128, // 128 bits is enough for 81 cells
 }

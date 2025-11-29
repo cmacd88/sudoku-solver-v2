@@ -4,7 +4,9 @@
 //! to efficiently eliminate candidates and solve cells.
 
 use crate::board::Board;
+use crate::strategy::{StrategyBank, StrategySelector, SelectionPolicy};
 use std::collections::VecDeque;
+use std::path::Path;
 
 /// Result type for solver operations
 pub type SolverResult<T> = Result<T, SolverError>;
@@ -26,19 +28,43 @@ pub enum SolverError {
 pub struct Solver {
     /// Maximum number of iterations before giving up
     max_iterations: usize,
+    
+    /// Strategy bank for loading strategies
+    strategy_bank: Option<StrategyBank>,
+    
+    /// Whether to use the strategy system
+    use_strategies: bool,
 }
 
 impl Solver {
-    /// Creates a new solver with default settings
+    /// Creates a new solver with default settings (no strategy system)
     pub fn new() -> Self {
         Self {
             max_iterations: 10000,
+            strategy_bank: None,
+            use_strategies: false,
         }
     }
     
     /// Creates a new solver with custom max iterations
     pub fn with_max_iterations(max_iterations: usize) -> Self {
-        Self { max_iterations }
+        Self { 
+            max_iterations,
+            strategy_bank: None,
+            use_strategies: false,
+        }
+    }
+    
+    /// Creates a new solver with strategy system enabled
+    pub fn with_strategies<P: AsRef<Path>>(strategy_dir: P) -> Result<Self, SolverError> {
+        let strategy_bank = StrategyBank::load_from_directory(strategy_dir)
+            .map_err(|e| SolverError::InvalidBoard(format!("Failed to load strategies: {}", e)))?;
+        
+        Ok(Self {
+            max_iterations: 10000,
+            strategy_bank: Some(strategy_bank),
+            use_strategies: true,
+        })
     }
     
     /// Solves the given board using constraint propagation
@@ -58,9 +84,14 @@ impl Solver {
             let progress = self.solve_iteration(board)?;
             
             if !progress {
-                // No progress made - would need speculative execution
-                // For MVP, we'll just stop here
-                break;
+                // No progress made with logical strategies
+                // Try backtracking if we have strategies enabled
+                if self.use_strategies {
+                    return self.solve_with_backtracking(board);
+                } else {
+                    // For basic solver, just stop here
+                    break;
+                }
             }
         }
         
@@ -71,8 +102,125 @@ impl Solver {
         Ok(())
     }
     
+    /// Solves using backtracking (depth-first search with constraint propagation)
+    fn solve_with_backtracking(&self, board: &mut Board) -> SolverResult<()> {
+        // Find the cell with the fewest candidates (most constrained)
+        let mut best_cell = None;
+        let mut min_candidates = 10;
+        
+        for cell_idx in 0..81 {
+            if !board.is_cell_solved(cell_idx) {
+                if let Some(cell) = board.get_cell(cell_idx) {
+                    let count = cell.candidates.count();
+                    if count == 0 {
+                        // Contradiction found
+                        return Err(SolverError::NoSolution);
+                    }
+                    if count < min_candidates {
+                        min_candidates = count;
+                        best_cell = Some(cell_idx);
+                    }
+                }
+            }
+        }
+        
+        // If no unsolved cells, we're done
+        let cell_idx = match best_cell {
+            Some(idx) => idx,
+            None => return Ok(()), // Solved!
+        };
+        
+        // Get the candidates for this cell
+        let candidates = board.get_cell(cell_idx)
+            .map(|c| c.candidates.to_vec())
+            .unwrap_or_default();
+        
+        // Try each candidate
+        for &value in &candidates {
+            // Save the current board state
+            let saved_board = board.clone();
+            
+            // Try this value
+            if board.set_cell_value(cell_idx, value).is_ok() {
+                // Propagate constraints
+                let mut queue = std::collections::VecDeque::new();
+                queue.push_back(cell_idx);
+                
+                let propagation_result = {
+                    let mut temp_queue = queue.clone();
+                    self.propagate_cell_constraints(board, cell_idx, &mut temp_queue)
+                };
+                
+                if propagation_result.is_ok() && board.is_valid() {
+                    // Try to solve recursively
+                    match self.solve_with_backtracking(board) {
+                        Ok(()) => {
+                            if board.is_solved() {
+                                return Ok(());
+                            }
+                        }
+                        Err(SolverError::NoSolution) => {
+                            // This branch failed, try next candidate
+                        }
+                        Err(e) => return Err(e),
+                    }
+                }
+            }
+            
+            // Restore board state and try next candidate
+            *board = saved_board;
+        }
+        
+        // No candidate worked
+        Err(SolverError::NoSolution)
+    }
+    
     /// Performs one iteration of solving strategies
     fn solve_iteration(&self, board: &mut Board) -> SolverResult<bool> {
+        if self.use_strategies {
+            // Use the strategy system
+            self.solve_iteration_with_strategies(board)
+        } else {
+            // Use hardcoded strategies (legacy mode)
+            self.solve_iteration_legacy(board)
+        }
+    }
+    
+    /// Performs one iteration using the strategy system
+    fn solve_iteration_with_strategies(&self, board: &mut Board) -> SolverResult<bool> {
+        let strategy_bank = self.strategy_bank.as_ref()
+            .ok_or_else(|| SolverError::InvalidBoard("Strategy bank not initialized".to_string()))?;
+        
+        // Create a new strategy selector for this iteration
+        let mut strategy_selector = StrategySelector::new(SelectionPolicy::Priority);
+        
+        let strategies = strategy_bank.get_all_strategies();
+        
+        // Try to find and apply a strategy
+        if let Some((_strategy, matches)) = strategy_selector.select_strategy(board, strategies) {
+            let mut progress = false;
+            
+            // Apply all matches for this strategy
+            for strategy_match in matches {
+                match strategy_selector.apply_match(board, &strategy_match) {
+                    Ok(made_progress) => {
+                        progress |= made_progress;
+                    }
+                    Err(e) => {
+                        return Err(SolverError::InvalidBoard(format!("Failed to apply strategy: {}", e)));
+                    }
+                }
+            }
+            
+            Ok(progress)
+        } else {
+            // No strategy found a match
+            Ok(false)
+        }
+    }
+    
+    /// Performs one iteration using legacy hardcoded strategies
+    fn solve_iteration_legacy(&self, board: &mut Board) -> SolverResult<bool> {
         let mut progress = false;
         
         // Try naked singles (cells with only one candidate)
