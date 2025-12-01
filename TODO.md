@@ -181,3 +181,64 @@
 ### Files Added:
 - `tests/advanced_strategy_test.rs` - 12 comprehensive tests for advanced strategies
 - Test puzzle files for advanced strategy validation
+
+---
+
+## Logging System Implementation ✅
+
+### Completed Features:
+✅ Comprehensive logging system with multiple log levels (OFF, ERROR, WARN, INFO, DEBUG, TRACE)
+✅ Timestamp support with millisecond precision using chrono
+✅ Performance tracking with Timer utility
+✅ Statistics tracking (iterations, strategies applied, backtracks, propagations)
+✅ CLI integration with --log-level flag (-l shorthand)
+✅ Environment variable support (RUST_LOG)
+✅ Logging throughout solver, strategy bank, and main application
+✅ Comprehensive documentation in LOGGING.md
+
+### Test Results:
+- **Total Tests**: 85/85 passing ✅
+  - Unit Tests: 43/43 ✅
+  - Integration Tests: 6/6 ✅
+  - Edge Case Tests: 16/16 ✅
+  - Strategy System Tests: 8/8 ✅
+  - Advanced Strategy Tests: 12/12 ✅
+
+### Dependencies Added:
+- `log = "0.4"` - Logging facade
+- `env_logger = "0.11"` - Logger implementation
+- `chrono = "0.4"` - Timestamp support
+
+### Files Added/Modified:
+- `src/logging/mod.rs` - Timer and SolverStats utilities (NEW)
+- `src/lib.rs` - Exported logging module
+- `src/solver/mod.rs` - Integrated logging throughout
+- `src/strategy/bank.rs` - Added strategy loading logs
+- `src/main.rs` - Added CLI flag and logging initialization
+- `Cargo.toml` - Added logging dependencies
+- `LOGGING.md` - Comprehensive logging documentation (NEW)
+
+### Usage Examples:
+```bash
+# INFO level (default)
+cargo run -- solve puzzle.txt
+
+# DEBUG level for detailed output
+cargo run -- solve puzzle.txt --log-level debug
+
+# TRACE level for maximum detail
+cargo run -- solve puzzle.txt -l trace
+
+# Using environment variable
+RUST_LOG=debug cargo run -- solve puzzle.txt
+```
+
+### Logging Coverage:
+✅ Solver initialization and configuration
+✅ Strategy loading and validation
+✅ Iteration progress and cell solving
+✅ Strategy application and pattern matching
+✅ Backtracking attempts and decisions
+✅ Constraint propagation details
+✅ Performance timing for operations
+✅ Final statistics and results

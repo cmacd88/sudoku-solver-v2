@@ -1,8 +1,9 @@
 //! Sudoku Solver v2 - CLI Application
 
-use sudoku_solver_v2::{Solver, io};
+use sudoku_solver_v2::{Solver, io, logging};
 use std::env;
 use std::path::Path;
+use log::LevelFilter;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -11,6 +12,10 @@ fn main() {
         print_usage();
         return;
     }
+    
+    // Parse log level from arguments
+    let log_level = parse_log_level(&args);
+    logging::init_logger_with_level(log_level);
     
     let command = &args[1];
     
@@ -35,17 +40,57 @@ fn main() {
     }
 }
 
+fn parse_log_level(args: &[String]) -> LevelFilter {
+    for i in 0..args.len() {
+        if args[i] == "--log-level" || args[i] == "-l" {
+            if i + 1 < args.len() {
+                return match args[i + 1].to_lowercase().as_str() {
+                    "off" => LevelFilter::Off,
+                    "error" => LevelFilter::Error,
+                    "warn" => LevelFilter::Warn,
+                    "info" => LevelFilter::Info,
+                    "debug" => LevelFilter::Debug,
+                    "trace" => LevelFilter::Trace,
+                    _ => {
+                        eprintln!("Warning: Invalid log level '{}', using 'info'", args[i + 1]);
+                        LevelFilter::Info
+                    }
+                };
+            }
+        }
+    }
+    
+    // Check environment variable
+    if let Ok(level) = env::var("RUST_LOG") {
+        return match level.to_lowercase().as_str() {
+            "off" => LevelFilter::Off,
+            "error" => LevelFilter::Error,
+            "warn" => LevelFilter::Warn,
+            "info" => LevelFilter::Info,
+            "debug" => LevelFilter::Debug,
+            "trace" => LevelFilter::Trace,
+            _ => LevelFilter::Info,
+        };
+    }
+    
+    // Default to Info
+    LevelFilter::Info
+}
+
 fn solve_puzzle(input: &str) {
+    log::info!("Sudoku Solver v2 - Advanced Strategy System");
     println!("Sudoku Solver v2 - Advanced Strategy System\n");
     
     // Try to load puzzle from file first, then as string
     let mut board = if Path::new(input).exists() {
         match io::load_puzzle_from_file(Path::new(input)) {
             Ok(b) => {
+                log::info!("Loaded puzzle from file: {}", input);
                 println!("Loaded puzzle from file: {}\n", input);
                 b
             }
             Err(e) => {
+                log::error!("Error loading puzzle from file: {}", e);
                 eprintln!("Error loading puzzle from file: {}", e);
                 return;
             }
@@ -53,10 +98,12 @@ fn solve_puzzle(input: &str) {
     } else {
         match io::load_puzzle_from_string(input) {
             Ok(b) => {
+                log::info!("Loaded puzzle from string");
                 println!("Loaded puzzle from string\n");
                 b
             }
             Err(e) => {
+                log::error!("Error parsing puzzle: {}", e);
                 eprintln!("Error parsing puzzle: {}", e);
                 return;
             }
@@ -69,13 +116,15 @@ fn solve_puzzle(input: &str) {
     
     // Solve the puzzle with strategy system
     println!("Solving with advanced strategies...\n");
+    log::info!("Starting solve process");
     
-    let solver = match Solver::with_strategies("strategies") {
+    let mut solver = match Solver::with_strategies("strategies") {
         Ok(s) => {
             println!("✓ Loaded strategy system\n");
             s
         }
         Err(e) => {
+            log::warn!("Failed to load strategies: {}", e);
             eprintln!("⚠ Failed to load strategies: {}", e);
             eprintln!("Falling back to basic solver\n");
             Solver::new()
@@ -85,12 +134,15 @@ fn solve_puzzle(input: &str) {
     match solver.solve(&mut board) {
         Ok(()) => {
             if board.is_solved() {
+                log::info!("Puzzle solved successfully!");
                 println!("✓ Puzzle solved successfully!\n");
             } else {
+                log::warn!("Partial solution achieved");
                 println!("⚠ Partial solution (needs more advanced strategies or guessing)\n");
             }
         }
         Err(e) => {
+            log::error!("Solving failed: {}", e);
             println!("✗ Solving failed: {}\n", e);
         }
     }
@@ -102,6 +154,7 @@ fn solve_puzzle(input: &str) {
     if board.is_valid() {
         println!("✓ Board is valid (no contradictions)");
     } else {
+        log::error!("Board has contradictions!");
         println!("✗ Board has contradictions!");
     }
 }
@@ -109,12 +162,18 @@ fn solve_puzzle(input: &str) {
 fn print_usage() {
     println!("Sudoku Solver v2 - MVP");
     println!("\nUsage:");
-    println!("  sudoku-solver-v2 solve <puzzle>");
+    println!("  sudoku-solver-v2 solve <puzzle> [options]");
     println!("  sudoku-solver-v2 help");
     println!("\nArguments:");
     println!("  <puzzle>    Either a file path or an 81-character string");
     println!("              Use '0' or '.' for empty cells, '1'-'9' for clues");
-    println!("\nExample:");
+    println!("\nOptions:");
+    println!("  --log-level, -l <level>    Set logging level (off, error, warn, info, debug, trace)");
+    println!("                             Default: info");
+    println!("                             Can also be set via RUST_LOG environment variable");
+    println!("\nExamples:");
     println!("  sudoku-solver-v2 solve puzzle.txt");
+    println!("  sudoku-solver-v2 solve puzzle.txt --log-level debug");
     println!("  sudoku-solver-v2 solve \"530070000600195000098000060800060003400803001700020006060000280000419005000080079\"");
+    println!("  RUST_LOG=trace sudoku-solver-v2 solve puzzle.txt");
 }

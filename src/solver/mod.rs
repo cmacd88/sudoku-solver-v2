@@ -5,6 +5,7 @@
 
 use crate::board::Board;
 use crate::strategy::{StrategyBank, StrategySelector, SelectionPolicy};
+use crate::logging::{Timer, SolverStats};
 use std::collections::VecDeque;
 use std::path::Path;
 
@@ -34,76 +35,114 @@ pub struct Solver {
     
     /// Whether to use the strategy system
     use_strategies: bool,
+    
+    /// Statistics tracker
+    stats: SolverStats,
 }
 
 impl Solver {
     /// Creates a new solver with default settings (no strategy system)
     pub fn new() -> Self {
+        log::debug!("Creating new solver (legacy mode)");
         Self {
             max_iterations: 10000,
             strategy_bank: None,
             use_strategies: false,
+            stats: SolverStats::new(),
         }
     }
     
     /// Creates a new solver with custom max iterations
     pub fn with_max_iterations(max_iterations: usize) -> Self {
+        log::debug!("Creating solver with max_iterations={}", max_iterations);
         Self { 
             max_iterations,
             strategy_bank: None,
             use_strategies: false,
+            stats: SolverStats::new(),
         }
     }
     
     /// Creates a new solver with strategy system enabled
     pub fn with_strategies<P: AsRef<Path>>(strategy_dir: P) -> Result<Self, SolverError> {
+        let _timer = Timer::new("Loading strategies");
+        log::info!("Initializing solver with strategy system");
+        
         let strategy_bank = StrategyBank::load_from_directory(strategy_dir)
             .map_err(|e| SolverError::InvalidBoard(format!("Failed to load strategies: {}", e)))?;
+        
+        let strategy_count = strategy_bank.get_all_strategies().len();
+        log::info!("Loaded {} strategies", strategy_count);
         
         Ok(Self {
             max_iterations: 10000,
             strategy_bank: Some(strategy_bank),
             use_strategies: true,
+            stats: SolverStats::new(),
         })
     }
     
     /// Solves the given board using constraint propagation
-    pub fn solve(&self, board: &mut Board) -> SolverResult<()> {
+    pub fn solve(&mut self, board: &mut Board) -> SolverResult<()> {
+        let _timer = Timer::new("Total solve time");
+        log::info!("Starting solve process");
+        log::debug!("Initial board state: {}/81 cells solved", board.solved_count());
+        
         if !board.is_valid() {
+            log::error!("Initial board state is invalid");
             return Err(SolverError::InvalidBoard("Initial board state is invalid".to_string()));
         }
         
         // Initial constraint propagation from clues
+        log::debug!("Propagating initial constraints");
         self.propagate_initial_constraints(board)?;
+        log::info!("After initial propagation: {}/81 cells solved", board.solved_count());
         
         let mut iteration = 0;
         
         while !board.is_solved() && iteration < self.max_iterations {
             iteration += 1;
+            self.stats.iterations = iteration;
             
+            log::debug!("Starting iteration {}", iteration);
             let progress = self.solve_iteration(board)?;
+            
+            if progress {
+                log::info!("Iteration {}: {}/81 cells solved", iteration, board.solved_count());
+            } else {
+                log::debug!("Iteration {}: No progress made", iteration);
+            }
             
             if !progress {
                 // No progress made with logical strategies
+                log::info!("Logical strategies exhausted, attempting backtracking");
                 // Try backtracking if we have strategies enabled
                 if self.use_strategies {
                     return self.solve_with_backtracking(board);
                 } else {
                     // For basic solver, just stop here
+                    log::warn!("Basic solver cannot proceed further");
                     break;
                 }
             }
         }
         
         if iteration >= self.max_iterations {
+            log::error!("Maximum iterations ({}) reached", self.max_iterations);
             return Err(SolverError::MaxIterationsReached);
         }
+        
+        self.stats.cells_solved = board.solved_count() as usize;
+        log::info!("Solve complete: {}/81 cells solved", board.solved_count());
+        self.stats.log_stats();
         
         Ok(())
     }
     
     /// Solves using backtracking (depth-first search with constraint propagation)
-    fn solve_with_backtracking(&self, board: &mut Board) -> SolverResult<()> {
+    fn solve_with_backtracking(&mut self, board: &mut Board) -> SolverResult<()> {
+        self.stats.backtracks += 1;
+        log::trace!("Backtracking attempt #{}", self.stats.backtracks);
         // Find the cell with the fewest candidates (most constrained)
         let mut best_cell = None;
         let mut min_candidates = 10;
@@ -114,6 +153,7 @@ impl Solver {
                     let count = cell.candidates.count();
                     if count == 0 {
                         // Contradiction found
+                        log::trace!("Contradiction found at cell {}", cell_idx);
                         return Err(SolverError::NoSolution);
                     }
                     if count < min_candidates {
@@ -127,8 +167,13 @@ impl Solver {
         // If no unsolved cells, we're done
         let cell_idx = match best_cell {
             Some(idx) => idx,
-            None => return Ok(()), // Solved!
+            None => {
+                log::debug!("Backtracking successful - puzzle solved!");
+                return Ok(()); // Solved!
+            }
         };
+        
+        log::trace!("Trying cell {} with {} candidates", cell_idx, min_candidates);
         
         // Get the candidates for this cell
         let candidates = board.get_cell(cell_idx)
@@ -137,11 +182,14 @@ impl Solver {
         
         // Try each candidate
         for &value in &candidates {
+            log::trace!("Trying value {} at cell {}", value, cell_idx);
+            
             // Save the current board state
             let saved_board = board.clone();
             
             // Try this value
             if board.set_cell_value(cell_idx, value).is_ok() {
+                log::trace!("Set cell {} = {}", cell_idx, value);
                 // Propagate constraints
                 let mut queue = std::collections::VecDeque::new();
                 queue.push_back(cell_idx);
@@ -156,14 +204,18 @@ impl Solver {
                     match self.solve_with_backtracking(board) {
                         Ok(()) => {
                             if board.is_solved() {
+                                log::trace!("Backtracking branch succeeded");
                                 return Ok(());
                             }
                         }
                         Err(SolverError::NoSolution) => {
                             // This branch failed, try next candidate
+                            log::trace!("Branch failed, trying next candidate");
                         }
                         Err(e) => return Err(e),
                     }
+                } else {
+                    log::trace!("Propagation failed or board invalid");
                 }
             }
             
@@ -172,11 +224,12 @@ impl Solver {
         }
         
         // No candidate worked
+        log::trace!("All candidates exhausted for cell {}", cell_idx);
         Err(SolverError::NoSolution)
     }
     
     /// Performs one iteration of solving strategies
-    fn solve_iteration(&self, board: &mut Board) -> SolverResult<bool> {
+    fn solve_iteration(&mut self, board: &mut Board) -> SolverResult<bool> {
         if self.use_strategies {
             // Use the strategy system
             self.solve_iteration_with_strategies(board)
@@ -187,7 +240,7 @@ impl Solver {
     }
     
     /// Performs one iteration using the strategy system
-    fn solve_iteration_with_strategies(&self, board: &mut Board) -> SolverResult<bool> {
+    fn solve_iteration_with_strategies(&mut self, board: &mut Board) -> SolverResult<bool> {
         let strategy_bank = self.strategy_bank.as_ref()
             .ok_or_else(|| SolverError::InvalidBoard("Strategy bank not initialized".to_string()))?;
         
@@ -197,16 +250,24 @@ impl Solver {
         let strategies = strategy_bank.get_all_strategies();
         
         // Try to find and apply a strategy
-        if let Some((_strategy, matches)) = strategy_selector.select_strategy(board, strategies) {
+        if let Some((strategy, matches)) = strategy_selector.select_strategy(board, strategies) {
+            log::debug!("Applying strategy: {} (priority: {})", strategy.metadata.name, strategy.priority);
+            log::trace!("Found {} matches for {}", matches.len(), strategy.metadata.name);
+            
             let mut progress = false;
             
             // Apply all matches for this strategy
             for strategy_match in matches {
                 match strategy_selector.apply_match(board, &strategy_match) {
                     Ok(made_progress) => {
+                        if made_progress {
+                            self.stats.strategies_applied += 1;
+                            log::trace!("Strategy match applied successfully");
+                        }
                         progress |= made_progress;
                     }
                     Err(e) => {
+                        log::error!("Failed to apply strategy: {}", e);
                         return Err(SolverError::InvalidBoard(format!("Failed to apply strategy: {}", e)));
                     }
                 }
@@ -215,12 +276,13 @@ impl Solver {
             Ok(progress)
         } else {
             // No strategy found a match
+            log::debug!("No strategy found a match");
             Ok(false)
         }
     }
     
     /// Performs one iteration using legacy hardcoded strategies
-    fn solve_iteration_legacy(&self, board: &mut Board) -> SolverResult<bool> {
+    fn solve_iteration_legacy(&mut self, board: &mut Board) -> SolverResult<bool> {
         let mut progress = false;
         
         // Try naked singles (cells with only one candidate)
@@ -233,7 +295,8 @@ impl Solver {
     }
     
     /// Propagates constraints from initial clues
-    pub fn propagate_initial_constraints(&self, board: &mut Board) -> SolverResult<()> {
+    pub fn propagate_initial_constraints(&mut self, board: &mut Board) -> SolverResult<()> {
+        log::trace!("Propagating initial constraints");
         let mut queue = VecDeque::new();
         
         // Add all initially solved cells to the queue
@@ -253,11 +316,12 @@ impl Solver {
     
     /// Propagates constraints from a single solved cell to its peers
     fn propagate_cell_constraints(
-        &self,
+        &mut self,
         board: &mut Board,
         cell_idx: usize,
         queue: &mut VecDeque<usize>,
     ) -> SolverResult<()> {
+        self.stats.constraint_propagations += 1;
         let value = match board.get_cell(cell_idx).and_then(|c| c.value) {
             Some(v) => v,
             None => return Ok(()), // Cell not solved, nothing to propagate
@@ -273,14 +337,18 @@ impl Solver {
             if let Some(peer_cell) = board.get_cell_mut(peer_idx) {
                 if !peer_cell.is_solved() && peer_cell.candidates.contains(value) {
                     peer_cell.remove_candidate(value);
+                    log::trace!("Removed candidate {} from cell {}", value, peer_idx);
                     
                     // Check for contradiction
                     if peer_cell.candidates.is_empty() {
+                        log::warn!("Contradiction detected at cell {} during propagation", peer_idx);
                         return Err(SolverError::NoSolution);
                     }
                     
                     // If cell became solved, add to queue
                     if peer_cell.is_solved() {
+                        let solved_value = peer_cell.value.unwrap();
+                        log::debug!("Cell {} solved with value {} via propagation", peer_idx, solved_value);
                         queue.push_back(peer_idx);
                     }
                 }
@@ -291,7 +359,8 @@ impl Solver {
     }
     
     /// Applies naked singles strategy: cells with only one candidate
-    fn apply_naked_singles(&self, board: &mut Board) -> SolverResult<bool> {
+    fn apply_naked_singles(&mut self, board: &mut Board) -> SolverResult<bool> {
+        log::trace!("Applying naked singles strategy");
         let mut progress = false;
         let mut queue = VecDeque::new();
         
@@ -301,10 +370,12 @@ impl Solver {
                 if let Some(cell) = board.get_cell(i) {
                     if cell.candidates.is_single() {
                         if let Some(value) = cell.candidates.get_single() {
+                            log::debug!("Naked single found: cell {} = {}", i, value);
                             board.set_cell_value(i, value)
                                 .map_err(|e| SolverError::InvalidBoard(e))?;
                             queue.push_back(i);
                             progress = true;
+                            self.stats.strategies_applied += 1;
                         }
                     }
                 }
@@ -320,7 +391,8 @@ impl Solver {
     }
     
     /// Applies hidden singles strategy: values that can only go in one cell in a unit
-    fn apply_hidden_singles(&self, board: &mut Board) -> SolverResult<bool> {
+    fn apply_hidden_singles(&mut self, board: &mut Board) -> SolverResult<bool> {
+        log::trace!("Applying hidden singles strategy");
         let mut progress = false;
         
         // Check rows
@@ -343,7 +415,7 @@ impl Solver {
     
     /// Finds hidden singles in a specific unit (row, column, or box)
     fn find_hidden_singles_in_unit(
-        &self,
+        &mut self,
         board: &mut Board,
         unit_idx: usize,
         unit_type: UnitType,
@@ -374,6 +446,8 @@ impl Solver {
                 let cell_idx = possible_cells[0];
                 if let Some(cell) = board.get_cell(cell_idx) {
                     if !cell.is_solved() {
+                        log::debug!("Hidden single found: cell {} = {} in {:?} {}", 
+                                   cell_idx, value, unit_type, unit_idx);
                         board.set_cell_value(cell_idx, value)
                             .map_err(|e| SolverError::InvalidBoard(e))?;
                         
@@ -385,6 +459,7 @@ impl Solver {
                         }
                         
                         progress = true;
+                        self.stats.strategies_applied += 1;
                     }
                 }
             }
@@ -414,7 +489,7 @@ mod tests {
 
     #[test]
     fn test_solver_creation() {
-        let solver = Solver::new();
+        let mut solver = Solver::new();
         assert_eq!(solver.max_iterations, 10000);
     }
 
@@ -424,7 +499,7 @@ mod tests {
         let puzzle = "530070000600195000098000060800060003400803001700020006060000280000419005000080079";
         let mut board = Board::from_string(puzzle).unwrap();
         
-        let solver = Solver::new();
+        let mut solver = Solver::new();
         let result = solver.solve(&mut board);
         
         // Should solve or make significant progress
@@ -436,7 +511,7 @@ mod tests {
         let mut board = Board::new();
         board.set_cell_value(0, 5).unwrap();
         
-        let solver = Solver::new();
+        let mut solver = Solver::new();
         solver.propagate_initial_constraints(&mut board).unwrap();
         
         // All peers of cell 0 should not have 5 as a candidate
@@ -462,7 +537,7 @@ mod tests {
         board.set_cell_value(7, 8).unwrap();
         // Cell 8 should now have only 9 as a candidate
         
-        let solver = Solver::new();
+        let mut solver = Solver::new();
         solver.propagate_initial_constraints(&mut board).unwrap();
         
         let cell = board.get_cell(8).unwrap();

@@ -10,7 +10,7 @@ fn test_solve_easy_puzzle_1() {
     let initial_solved = board.solved_count();
     assert!(initial_solved > 0, "Puzzle should have initial clues");
     
-    let solver = Solver::new();
+    let mut solver = Solver::new();
     let result = solver.solve(&mut board);
     
     assert!(result.is_ok(), "Solver should not error");
@@ -25,7 +25,7 @@ fn test_solve_easy_puzzle_2() {
     
     let initial_solved = board.solved_count();
     
-    let solver = Solver::new();
+    let mut solver = Solver::new();
     let result = solver.solve(&mut board);
     
     assert!(result.is_ok(), "Solver should not error");
@@ -59,7 +59,7 @@ fn test_constraint_propagation() {
     board.set_cell_value(1, 2).unwrap();
     board.set_cell_value(2, 3).unwrap();
     
-    let solver = Solver::new();
+    let mut solver = Solver::new();
     let result = solver.solve(&mut board);
     
     assert!(result.is_ok());
@@ -82,7 +82,7 @@ fn test_empty_board() {
     assert_eq!(board.solved_count(), 0);
     assert!(board.is_valid());
     
-    let solver = Solver::new();
+    let mut solver = Solver::new();
     let result = solver.solve(&mut board);
     
     // Empty board can't be solved without guessing
