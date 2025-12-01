@@ -1,0 +1,30 @@
+{
+  "name": "naked_pair",
+  "difficulty": 3,
+  "description": "Two cells in a unit with the same two candidates eliminate those candidates from other cells",
+  "applicable_dimensions": ["9x9", "6x6", "16x16"],
+  "pattern": {
+    "type": "cell_group",
+    "unit_type": ["row", "column", "box"],
+    "conditions": [
+      {
+        "type": "cell_count",
+        "count": 2
+      },
+      {
+        "type": "candidate_count",
+        "count": 2
+      },
+      {
+        "type": "same_candidates",
+        "value": true
+      }
+    ]
+  },
+  "action": {
+    "type": "eliminate_candidates",
+    "target": "other_cells_in_unit",
+    "candidates": "matched_candidates"
+  },
+  "priority": 70
+}

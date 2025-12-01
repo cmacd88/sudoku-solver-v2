@@ -1,0 +1,20 @@
+{
+  "name": "naked_single",
+  "difficulty": 1,
+  "description": "A cell with only one candidate must contain that value",
+  "applicable_dimensions": ["9x9", "6x6", "16x16"],
+  "pattern": {
+    "type": "single_cell",
+    "conditions": [
+      {
+        "type": "single_candidate"
+      }
+    ]
+  },
+  "action": {
+    "type": "set_cell_value",
+    "target": "matched_cells",
+    "value": "single_candidate"
+  },
+  "priority": 100
+}

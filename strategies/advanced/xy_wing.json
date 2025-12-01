@@ -1,0 +1,34 @@
+{
+  "name": "xy_wing",
+  "difficulty": 7,
+  "description": "Three cells forming a Y-shape: a pivot cell with candidates XY, and two wing cells with XZ and YZ. If a cell sees both wings, eliminate Z from it",
+  "applicable_dimensions": ["9x9", "6x6", "16x16"],
+  "pattern": {
+    "type": "chain_pattern",
+    "chain_type": "xy_wing",
+    "conditions": [
+      {
+        "type": "cell_count",
+        "count": 3
+      },
+      {
+        "type": "pivot_candidates",
+        "count": 2
+      },
+      {
+        "type": "wing_candidates",
+        "count": 2
+      },
+      {
+        "type": "shared_candidate_structure",
+        "value": true
+      }
+    ]
+  },
+  "action": {
+    "type": "eliminate_candidates",
+    "target": "cells_seeing_both_wings",
+    "candidates": "common_wing_candidate"
+  },
+  "priority": 35
+}

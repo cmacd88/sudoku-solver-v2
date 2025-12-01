@@ -36,7 +36,7 @@ fn main() {
 }
 
 fn solve_puzzle(input: &str) {
-    println!("Sudoku Solver v2 - MVP\n");
+    println!("Sudoku Solver v2 - Advanced Strategy System\n");
     
     // Try to load puzzle from file first, then as string
     let mut board = if Path::new(input).exists() {
@@ -67,16 +67,27 @@ fn solve_puzzle(input: &str) {
     println!("{}", board);
     println!("{}\n", io::format_statistics(&board));
     
-    // Solve the puzzle
-    println!("Solving...\n");
-    let solver = Solver::new();
+    // Solve the puzzle with strategy system
+    println!("Solving with advanced strategies...\n");
+    
+    let solver = match Solver::with_strategies("strategies") {
+        Ok(s) => {
+            println!("✓ Loaded strategy system\n");
+            s
+        }
+        Err(e) => {
+            eprintln!("⚠ Failed to load strategies: {}", e);
+            eprintln!("Falling back to basic solver\n");
+            Solver::new()
+        }
+    };
     
     match solver.solve(&mut board) {
         Ok(()) => {
             if board.is_solved() {
                 println!("✓ Puzzle solved successfully!\n");
             } else {
-                println!("⚠ Partial solution (needs advanced strategies)\n");
+                println!("⚠ Partial solution (needs more advanced strategies or guessing)\n");
             }
         }
         Err(e) => {

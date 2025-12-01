@@ -1,26 +1,27 @@
 //! Strategy module for Sudoku solving strategies.
 //!
-//! For MVP, this is a placeholder. In the full version, this will load
-//! strategies from JSON files and apply them dynamically.
+//! This module provides a JSON-based strategy system that allows defining
+//! solving strategies in JSON files and applying them dynamically.
+//!
+//! # Components
+//!
+//! - `types`: Core type definitions for strategies, patterns, and actions
+//! - `bank`: Strategy loading and management from JSON files
+//! - `matcher`: Pattern matching implementations for various strategies
+//! - `selector`: Strategy selection logic for choosing which strategy to apply
 
-/// Placeholder for strategy system
-/// In the full version, this will contain:
-/// - Strategy bank for loading JSON strategy definitions
-/// - Pattern matcher for finding strategy applications
-/// - Strategy selector for choosing which strategy to apply
+pub mod types;
+pub mod bank;
+pub mod matcher;
+pub mod selector;
 
-pub struct StrategyBank {
-    // Placeholder for future implementation
-}
+// Re-export commonly used types
+pub use types::{
+    Strategy, StrategyMetadata, StrategyPattern, StrategyAction,
+    StrategyMatch, MatchContext, UnitType,
+    PatternCondition, TargetCells, CandidateSource,
+};
 
-impl StrategyBank {
-    pub fn new() -> Self {
-        Self {}
-    }
-}
-
-impl Default for StrategyBank {
-    fn default() -> Self {
-        Self::new()
-    }
-}
+pub use bank::{StrategyBank, StrategyError};
+pub use matcher::{PatternMatcher, create_matcher};
+pub use selector::{StrategySelector, SelectionPolicy, StrategyStatistics};
