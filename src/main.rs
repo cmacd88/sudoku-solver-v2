@@ -1,6 +1,6 @@
 //! Sudoku Solver v2 - CLI Application
 
-use sudoku_solver_v2::{Solver, io, logging};
+use sudoku_solver_v2::{Solver, SpeculationConfig, SpeculationMode, io, logging};
 use std::env;
 use std::path::Path;
 use log::LevelFilter;
@@ -13,8 +13,10 @@ fn main() {
         return;
     }
     
-    // Parse log level from arguments
+    // Parse command line arguments
     let log_level = parse_log_level(&args);
+    let speculation_config = parse_speculation_config(&args);
+    
     logging::init_logger_with_level(log_level);
     
     let command = &args[1];
@@ -28,7 +30,7 @@ fn main() {
             }
             
             let puzzle_input = &args[2];
-            solve_puzzle(puzzle_input);
+            solve_puzzle(puzzle_input, speculation_config);
         }
         "help" | "--help" | "-h" => {
             print_usage();
@@ -38,6 +40,42 @@ fn main() {
             print_usage();
         }
     }
+}
+
+fn parse_speculation_config(args: &[String]) -> SpeculationConfig {
+    let mut config = SpeculationConfig::default();
+    
+    for i in 0..args.len() {
+        match args[i].as_str() {
+            "--speculation-mode" | "-s" => {
+                if i + 1 < args.len() {
+                    if let Some(mode) = SpeculationMode::from_str(&args[i + 1]) {
+                        config.mode = mode;
+                    } else {
+                        eprintln!("Warning: Invalid speculation mode '{}', using default (hybrid)", args[i + 1]);
+                    }
+                }
+            }
+            "--speculation-depth" | "-d" => {
+                if i + 1 < args.len() {
+                    if let Ok(depth) = args[i + 1].parse::<usize>() {
+                        config.max_depth = depth;
+                    } else {
+                        eprintln!("Warning: Invalid depth '{}', using default (3)", args[i + 1]);
+                    }
+                }
+            }
+            "--no-speculation" => {
+                config.enabled = false;
+            }
+            "--no-stats" => {
+                config.track_statistics = false;
+            }
+            _ => {}
+        }
+    }
+    
+    config
 }
 
 fn parse_log_level(args: &[String]) -> LevelFilter {
@@ -77,7 +115,7 @@ fn parse_log_level(args: &[String]) -> LevelFilter {
     LevelFilter::Info
 }
 
-fn solve_puzzle(input: &str) {
+fn solve_puzzle(input: &str, speculation_config: SpeculationConfig) {
     log::info!("Sudoku Solver v2 - Advanced Strategy System");
     println!("Sudoku Solver v2 - Advanced Strategy System\n");
     
@@ -118,9 +156,15 @@ fn solve_puzzle(input: &str) {
     println!("Solving with advanced strategies...\n");
     log::info!("Starting solve process");
     
-    let mut solver = match Solver::with_strategies("strategies") {
+    let mut solver = match Solver::with_speculation("strategies", speculation_config.clone()) {
         Ok(s) => {
-            println!("✓ Loaded strategy system\n");
+            println!("✓ Loaded strategy system");
+            if speculation_config.enabled {
+                println!("✓ Speculation enabled (mode: {:?}, depth: {})\n", 
+                        speculation_config.mode, speculation_config.max_depth);
+            } else {
+                println!("✓ Speculation disabled (using legacy backtracking)\n");
+            }
             s
         }
         Err(e) => {
@@ -160,7 +204,7 @@ fn solve_puzzle(input: &str) {
 }
 
 fn print_usage() {
-    println!("Sudoku Solver v2 - MVP");
+    println!("Sudoku Solver v2 - Advanced Speculation System");
     println!("\nUsage:");
     println!("  sudoku-solver-v2 solve <puzzle> [options]");
     println!("  sudoku-solver-v2 help");
@@ -168,12 +212,24 @@ fn print_usage() {
     println!("  <puzzle>    Either a file path or an 81-character string");
     println!("              Use '0' or '.' for empty cells, '1'-'9' for clues");
     println!("\nOptions:");
-    println!("  --log-level, -l <level>    Set logging level (off, error, warn, info, debug, trace)");
-    println!("                             Default: info");
-    println!("                             Can also be set via RUST_LOG environment variable");
+    println!("  --log-level, -l <level>         Set logging level (off, error, warn, info, debug, trace)");
+    println!("                                  Default: info");
+    println!("                                  Can also be set via RUST_LOG environment variable");
+    println!("\n  --speculation-mode, -s <mode>   Set speculation mode (sequential, parallel, hybrid)");
+    println!("                                  Default: hybrid");
+    println!("                                  - sequential: Traditional backtracking");
+    println!("                                  - parallel: Explore all branches in parallel");
+    println!("                                  - hybrid: Intelligently choose based on board state");
+    println!("\n  --speculation-depth, -d <num>   Set maximum speculation depth");
+    println!("                                  Default: 3");
+    println!("\n  --no-speculation                Disable speculation (use legacy backtracking)");
+    println!("\n  --no-stats                      Disable speculation statistics tracking");
     println!("\nExamples:");
     println!("  sudoku-solver-v2 solve puzzle.txt");
     println!("  sudoku-solver-v2 solve puzzle.txt --log-level debug");
+    println!("  sudoku-solver-v2 solve puzzle.txt --speculation-mode parallel");
+    println!("  sudoku-solver-v2 solve puzzle.txt -s sequential -d 5");
+    println!("  sudoku-solver-v2 solve puzzle.txt --no-speculation");
     println!("  sudoku-solver-v2 solve \"530070000600195000098000060800060003400803001700020006060000280000419005000080079\"");
     println!("  RUST_LOG=trace sudoku-solver-v2 solve puzzle.txt");
 }

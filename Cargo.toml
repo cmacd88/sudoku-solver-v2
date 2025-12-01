@@ -17,6 +17,9 @@ log = "0.4"
 env_logger = "0.11"
 chrono = "0.4"
 
+# For parallel speculation
+rayon = "1.8"
+
 [dev-dependencies]
 # For testing
 tempfile = "3.8"

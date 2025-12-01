@@ -3,9 +3,12 @@
 //! This module implements constraint propagation using the view abstractions
 //! to efficiently eliminate candidates and solve cells.
 
+pub mod speculative;
+
 use crate::board::Board;
 use crate::strategy::{StrategyBank, StrategySelector, SelectionPolicy};
 use crate::logging::{Timer, SolverStats};
+use self::speculative::{SpeculationConfig, SpeculationMode, SpeculationStatistics};
 use std::collections::VecDeque;
 use std::path::Path;
 
@@ -38,6 +41,12 @@ pub struct Solver {
     
     /// Statistics tracker
     stats: SolverStats,
+    
+    /// Speculation configuration
+    speculation_config: SpeculationConfig,
+    
+    /// Speculation statistics
+    speculation_stats: SpeculationStatistics,
 }
 
 impl Solver {
@@ -49,6 +58,8 @@ impl Solver {
             strategy_bank: None,
             use_strategies: false,
             stats: SolverStats::new(),
+            speculation_config: SpeculationConfig::default(),
+            speculation_stats: SpeculationStatistics::new(),
         }
     }
     
@@ -60,6 +71,8 @@ impl Solver {
             strategy_bank: None,
             use_strategies: false,
             stats: SolverStats::new(),
+            speculation_config: SpeculationConfig::default(),
+            speculation_stats: SpeculationStatistics::new(),
         }
     }
     
@@ -79,7 +92,24 @@ impl Solver {
             strategy_bank: Some(strategy_bank),
             use_strategies: true,
             stats: SolverStats::new(),
+            speculation_config: SpeculationConfig::default(),
+            speculation_stats: SpeculationStatistics::new(),
         })
+    }
+    
+    /// Creates a new solver with custom speculation configuration
+    pub fn with_speculation<P: AsRef<Path>>(
+        strategy_dir: P,
+        speculation_config: SpeculationConfig,
+    ) -> Result<Self, SolverError> {
+        let mut solver = Self::with_strategies(strategy_dir)?;
+        solver.speculation_config = speculation_config;
+        Ok(solver)
+    }
+    
+    /// Set speculation configuration
+    pub fn set_speculation_config(&mut self, config: SpeculationConfig) {
+        self.speculation_config = config;
     }
     
     /// Solves the given board using constraint propagation
@@ -115,10 +145,10 @@ impl Solver {
             
             if !progress {
                 // No progress made with logical strategies
-                log::info!("Logical strategies exhausted, attempting backtracking");
-                // Try backtracking if we have strategies enabled
+                log::info!("Logical strategies exhausted, attempting speculation");
+                // Try speculation if we have strategies enabled
                 if self.use_strategies {
-                    return self.solve_with_backtracking(board);
+                    return self.solve_with_speculation(board);
                 } else {
                     // For basic solver, just stop here
                     log::warn!("Basic solver cannot proceed further");
@@ -136,7 +166,84 @@ impl Solver {
         log::info!("Solve complete: {}/81 cells solved", board.solved_count());
         self.stats.log_stats();
         
+        if self.speculation_config.track_statistics {
+            self.speculation_stats.log_stats();
+        }
+        
         Ok(())
+    }
+    
+    /// Solves using speculation (replaces old backtracking)
+    fn solve_with_speculation(&mut self, board: &mut Board) -> SolverResult<()> {
+        if !self.speculation_config.enabled {
+            log::info!("Speculation disabled, using legacy backtracking");
+            return self.solve_with_backtracking(board);
+        }
+        
+        log::info!("Starting speculation with mode: {:?}", self.speculation_config.mode);
+        
+        // Find best cell for speculation
+        let (cell_idx, candidates) = match speculative::find_best_speculation_cell(board) {
+            Some(result) => result,
+            None => {
+                log::debug!("No valid cell for speculation");
+                return if board.is_solved() {
+                    Ok(())
+                } else {
+                    Err(SolverError::NoSolution)
+                };
+            }
+        };
+        
+        log::debug!("Speculating on cell {} with {} candidates", cell_idx, candidates.len());
+        
+        // Choose speculation mode
+        let mode = match self.speculation_config.mode {
+            SpeculationMode::Hybrid => {
+                let strategy = speculative::choose_speculation_strategy(board);
+                match strategy {
+                    speculative::HybridStrategy::Bifurcation => SpeculationMode::Parallel,
+                    speculative::HybridStrategy::Backtracking => SpeculationMode::Sequential,
+                    speculative::HybridStrategy::LimitedBifurcation(_) => SpeculationMode::Parallel,
+                }
+            }
+            mode => mode,
+        };
+        
+        self.speculation_stats.record_mode_used(mode);
+        
+        // Execute speculation based on chosen mode
+        match mode {
+            SpeculationMode::Parallel => {
+                log::info!("Using parallel speculation");
+                match speculative::solve_parallel(
+                    board,
+                    cell_idx,
+                    &candidates,
+                    0,
+                    self.speculation_config.max_depth,
+                    &mut self.speculation_stats,
+                ) {
+                    Ok(Some(solved_board)) => {
+                        *board = solved_board;
+                        Ok(())
+                    }
+                    Ok(None) => Err(SolverError::NoSolution),
+                    Err(e) => Err(e),
+                }
+            }
+            SpeculationMode::Sequential | SpeculationMode::Hybrid => {
+                log::info!("Using sequential speculation");
+                speculative::solve_sequential(
+                    board,
+                    cell_idx,
+                    &candidates,
+                    0,
+                    self.speculation_config.max_depth,
+                    &mut self.speculation_stats,
+                )
+            }
+        }
     }
     
     /// Solves using backtracking (depth-first search with constraint propagation)
