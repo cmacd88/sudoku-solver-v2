@@ -267,26 +267,6 @@ impl StrategySelector {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::strategy::types::*;
-
-    fn create_test_strategy(name: &str, priority: u32, difficulty: u32) -> Strategy {
-        Strategy {
-            metadata: StrategyMetadata {
-                name: name.to_string(),
-                difficulty,
-                description: "Test strategy".to_string(),
-                applicable_dimensions: vec!["9x9".to_string()],
-            },
-            pattern: StrategyPattern::SingleCell {
-                conditions: vec![],
-            },
-            action: StrategyAction::SetCellValue {
-                target: TargetCells::MatchedCells,
-                value: CandidateSource::SingleCandidate,
-            },
-            priority,
-        }
-    }
 
     #[test]
     fn test_selector_creation() {

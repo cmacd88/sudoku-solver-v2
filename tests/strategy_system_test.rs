@@ -118,9 +118,9 @@ fn test_apply_strategy_match() {
     let strategies = bank.get_all_strategies();
     
     // Select and apply strategy
-    if let Some((strategy, matches)) = selector.select_strategy(&board, strategies) {
+    if let Some((_strategy, matches)) = selector.select_strategy(&board, strategies) {
         assert!(!matches.is_empty());
-        
+
         let strategy_match = &matches[0];
         let result = selector.apply_match(&mut board, strategy_match);
         
