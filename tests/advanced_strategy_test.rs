@@ -67,7 +67,7 @@ fn test_x_wing_pattern_detection() {
     // Row 1: candidate 5 in columns 0 and 2
     // This should eliminate 5 from columns 0 and 2 in other rows
     
-    let solver = Solver::new();
+    let mut solver = Solver::new();
     solver.propagate_initial_constraints(&mut board).unwrap();
     
     // Use the matcher to find X-Wing patterns
@@ -88,7 +88,7 @@ fn test_swordfish_pattern_detection() {
     let puzzle = "000000000000000000000000000000000000000000000000000000000000000000000000000000000";
     let mut board = Board::from_string(puzzle).unwrap();
     
-    let solver = Solver::new();
+    let mut solver = Solver::new();
     solver.propagate_initial_constraints(&mut board).unwrap();
     
     // Use the matcher to find Swordfish patterns
@@ -108,7 +108,7 @@ fn test_xy_wing_pattern_detection() {
     let puzzle = "000000000000000000000000000000000000000000000000000000000000000000000000000000000";
     let mut board = Board::from_string(puzzle).unwrap();
     
-    let solver = Solver::new();
+    let mut solver = Solver::new();
     solver.propagate_initial_constraints(&mut board).unwrap();
     
     // Use the matcher to find XY-Wing patterns
@@ -133,7 +133,7 @@ fn test_advanced_strategies_on_hard_puzzle() {
     let mut board = Board::from_string(puzzle).unwrap();
     
     // Propagate initial constraints
-    let solver = Solver::new();
+    let mut solver = Solver::new();
     solver.propagate_initial_constraints(&mut board).unwrap();
     
     // Get all strategies including advanced ones
@@ -273,7 +273,7 @@ fn test_advanced_strategies_with_selection_policies() {
     let puzzle = "530070000600195000098000060800060003400803001700020006060000280000419005000080079";
     let mut board = Board::from_string(puzzle).unwrap();
     
-    let solver = Solver::new();
+    let mut solver = Solver::new();
     solver.propagate_initial_constraints(&mut board).unwrap();
     
     let strategies = bank.get_all_strategies();
@@ -297,7 +297,7 @@ fn test_elimination_correctness() {
     let puzzle = "530070000600195000098000060800060003400803001700020006060000280000419005000080079";
     let mut board = Board::from_string(puzzle).unwrap();
     
-    let solver = Solver::new();
+    let mut solver = Solver::new();
     solver.propagate_initial_constraints(&mut board).unwrap();
     
     // Count initial candidates

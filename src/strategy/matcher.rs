@@ -1073,7 +1073,7 @@ mod tests {
         }
         
         // Propagate constraints so cell 8 has only candidate 9
-        let solver = Solver::new();
+        let mut solver = Solver::new();
         solver.propagate_initial_constraints(&mut board).unwrap();
         
         let matcher = NakedSingleMatcher::new();
