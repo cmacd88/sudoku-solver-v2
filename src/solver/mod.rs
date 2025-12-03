@@ -3,10 +3,13 @@
 //! This module implements constraint propagation using the view abstractions
 //! to efficiently eliminate candidates and solve cells.
 
+pub mod speculative;
+
 use crate::board::Board;
 use crate::strategy::{StrategyBank, StrategySelector, SelectionPolicy};
 use std::collections::VecDeque;
 use std::path::Path;
+pub use speculative::{SpeculationConfig, SpeculationMode, SpeculationStatistics};
 
 /// Result type for solver operations
 pub type SolverResult<T> = Result<T, SolverError>;
@@ -34,6 +37,12 @@ pub struct Solver {
     
     /// Whether to use the strategy system
     use_strategies: bool,
+    
+    /// Speculation configuration
+    speculation_config: SpeculationConfig,
+    
+    /// Speculation statistics
+    speculation_stats: Option<SpeculationStatistics>,
 }
 
 impl Solver {
@@ -43,6 +52,8 @@ impl Solver {
             max_iterations: 10000,
             strategy_bank: None,
             use_strategies: false,
+            speculation_config: SpeculationConfig::default(),
+            speculation_stats: None,
         }
     }
     
@@ -52,6 +63,8 @@ impl Solver {
             max_iterations,
             strategy_bank: None,
             use_strategies: false,
+            speculation_config: SpeculationConfig::default(),
+            speculation_stats: None,
         }
     }
     
@@ -64,7 +77,48 @@ impl Solver {
             max_iterations: 10000,
             strategy_bank: Some(strategy_bank),
             use_strategies: true,
+            speculation_config: SpeculationConfig::default(),
+            speculation_stats: None,
         })
+    }
+    
+    /// Creates a new solver with speculation system enabled
+    pub fn with_speculation<P: AsRef<Path>>(
+        strategy_dir: P,
+        speculation_config: SpeculationConfig,
+    ) -> Result<Self, SolverError> {
+        let strategy_bank = StrategyBank::load_from_directory(strategy_dir)
+            .map_err(|e| SolverError::InvalidBoard(format!("Failed to load strategies: {}", e)))?;
+        
+        let speculation_stats = if speculation_config.track_statistics {
+            Some(SpeculationStatistics::new())
+        } else {
+            None
+        };
+        
+        Ok(Self {
+            max_iterations: 10000,
+            strategy_bank: Some(strategy_bank),
+            use_strategies: true,
+            speculation_config,
+            speculation_stats,
+        })
+    }
+    
+    /// Sets the speculation configuration
+    pub fn set_speculation_config(&mut self, config: SpeculationConfig) {
+        let track_stats = config.track_statistics;
+        self.speculation_config = config;
+        self.speculation_stats = if track_stats {
+            Some(SpeculationStatistics::new())
+        } else {
+            None
+        };
+    }
+    
+    /// Gets the speculation statistics (if tracking is enabled)
+    pub fn get_speculation_stats(&self) -> Option<&SpeculationStatistics> {
+        self.speculation_stats.as_ref()
     }
     
     /// Solves the given board using constraint propagation
@@ -85,9 +139,13 @@ impl Solver {
             
             if !progress {
                 // No progress made with logical strategies
-                // Try backtracking if we have strategies enabled
+                // Try speculation/backtracking if we have strategies enabled
                 if self.use_strategies {
-                    return self.solve_with_backtracking(board);
+                    if self.speculation_config.enabled {
+                        return self.solve_with_speculation(board);
+                    } else {
+                        return self.solve_with_backtracking(board);
+                    }
                 } else {
                     // For basic solver, just stop here
                     break;
@@ -175,8 +233,19 @@ impl Solver {
         Err(SolverError::NoSolution)
     }
     
+    /// Solves using the speculation system
+    fn solve_with_speculation(&self, board: &mut Board) -> SolverResult<()> {
+        speculative::solve_with_speculation(
+            board,
+            self,
+            &self.speculation_config,
+            self.speculation_stats.as_ref(),
+            0,
+        )
+    }
+    
     /// Performs one iteration of solving strategies
-    fn solve_iteration(&self, board: &mut Board) -> SolverResult<bool> {
+    pub(crate) fn solve_iteration(&self, board: &mut Board) -> SolverResult<bool> {
         if self.use_strategies {
             // Use the strategy system
             self.solve_iteration_with_strategies(board)
@@ -252,7 +321,7 @@ impl Solver {
     }
     
     /// Propagates constraints from a single solved cell to its peers
-    fn propagate_cell_constraints(
+    pub(crate) fn propagate_cell_constraints(
         &self,
         board: &mut Board,
         cell_idx: usize,
