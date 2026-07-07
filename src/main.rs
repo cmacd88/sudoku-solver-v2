@@ -115,7 +115,7 @@ fn solve_puzzle(input: &str, speculation_config: SpeculationConfig) {
     // Solve the puzzle with strategy system and speculation
     println!("Solving with advanced strategies...\n");
     
-    let solver = match Solver::with_speculation("strategies", speculation_config.clone()) {
+    let mut solver = match Solver::with_speculation("strategies", speculation_config.clone()) {
         Ok(s) => {
             println!("✓ Loaded strategy system");
             if speculation_config.enabled {

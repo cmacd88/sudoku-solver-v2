@@ -373,8 +373,7 @@ pub fn solve_with_speculation(
     board: &mut Board,
     solver: &super::Solver,
     config: &SpeculationConfig,
-    _stats: Option<&SpeculationStatistics>,
-    _depth: usize,
+    stats: &mut SpeculationStatistics,
 ) -> SolverResult<()> {
     if !config.enabled {
         // Speculation disabled, shouldn't be called
@@ -437,22 +436,20 @@ pub fn solve_with_speculation(
         }
     };
 
-    let mut stats = SpeculationStatistics::new();
-
     eprintln!("DEBUG: mode={:?}, cell={}, candidates={:?}", config.mode, cell_idx, candidates);
 
     // Choose strategy based on mode
     let result = match config.mode {
         SpeculationMode::Sequential => {
-            stats.record_mode_used(SpeculationMode::Sequential);
-            solve_sequential(board, cell_idx, &candidates, 0, config.max_depth, &mut stats)
-        }
-        SpeculationMode::Parallel | SpeculationMode::Hybrid => {
-    match solve_parallel(board, &mut stats) {
-        Ok(Some(solved_board)) => { *board = solved_board; Ok(()) }
-        Ok(None) => Err(SolverError::NoSolution),
-        Err(e) => Err(e),
+    stats.record_mode_used(SpeculationMode::Sequential);
+    solve_sequential(board, cell_idx, &candidates, 0, config.max_depth, stats)
     }
+    SpeculationMode::Parallel | SpeculationMode::Hybrid => {
+        match solve_parallel(board, stats) {
+            Ok(Some(solved_board)) => { *board = solved_board; Ok(()) }
+            Ok(None) => Err(SolverError::NoSolution),
+            Err(e) => Err(e),
+        }
     }
     };
 

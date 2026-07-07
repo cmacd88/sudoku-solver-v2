@@ -129,7 +129,7 @@ impl Solver {
     }
     
     /// Solves the given board using constraint propagation
-    pub fn solve(&self, board: &mut Board) -> SolverResult<()> {
+    pub fn solve(&mut self, board: &mut Board) -> SolverResult<()> {
         if !board.is_valid() {
             return Err(SolverError::InvalidBoard("Initial board state is invalid".to_string()));
         }
@@ -138,15 +138,11 @@ impl Solver {
             PropagationOutcome::Solved => Ok(()),
             PropagationOutcome::Contradiction => Err(SolverError::NoSolution),
             PropagationOutcome::Stuck => {
-                if self.use_strategies {
-                    if self.speculation_config.enabled {
-                        eprintln!("Speculation triggered: deterministic propagation stalled; branching search started.");
-                        self.solve_with_speculation(board)
-                    } else {
-                        self.solve_with_backtracking(board)
-                    }
+                if self.speculation_config.enabled {
+                    eprintln!("Speculation triggered: deterministic propagation stalled; branching search started.");
+                    self.solve_with_speculation(board)
                 } else {
-                    Ok(())
+                    self.solve_with_backtracking(board)
                 }
             }
         }
@@ -247,14 +243,11 @@ impl Solver {
 
     
     /// Solves using the speculation system
-    fn solve_with_speculation(&self, board: &mut Board) -> SolverResult<()> {
-        speculative::solve_with_speculation(
-            board,
-            self,
-            &self.speculation_config,
-            self.speculation_stats.as_ref(),
-            0,
-        )
+    fn solve_with_speculation(&mut self, board: &mut Board) -> SolverResult<()> {
+        let mut stats = SpeculationStatistics::new();
+        let result = speculative::solve_with_speculation(board, self, &self.speculation_config, &mut stats);
+        self.speculation_stats = Some(stats);
+        result
     }
     
     /// Performs one iteration of solving strategies
@@ -510,7 +503,7 @@ mod tests {
         let puzzle = "530070000600195000098000060800060003400803001700020006060000280000419005000080079";
         let mut board = Board::from_string(puzzle).unwrap();
         
-        let solver = Solver::new();
+        let mut solver = Solver::new();
         let result = solver.solve(&mut board);
         
         // Should solve or make significant progress

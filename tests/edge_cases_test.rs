@@ -114,8 +114,8 @@ fn test_almost_solved_puzzle() {
     assert_eq!(board.unsolved_count(), 1);
     
     // Should solve easily
-    let solver = Solver::new();
-    let result = solver.solve(&mut board);
+    let mut solver = Solver::new();
+    let result = &mut solver.solve(&mut board);
     assert!(result.is_ok());
     assert!(board.is_solved());
 }
@@ -163,7 +163,7 @@ fn test_hard_puzzle_partial_solve() {
     let mut board = result.unwrap();
     assert!(board.is_valid());
     
-    let solver = Solver::new();
+    let mut solver = Solver::new();
     let result = solver.solve(&mut board);
     
     // Should not fully solve but should make some progress
