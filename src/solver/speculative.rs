@@ -442,6 +442,8 @@ pub fn solve_with_speculation(
 
     let mut stats = SpeculationStatistics::new();
 
+    eprintln!("DEBUG: mode={:?}, cell={}, candidates={:?}", config.mode, cell_idx, candidates);
+
     // Choose strategy based on mode
     let result = match config.mode {
         SpeculationMode::Sequential => {
