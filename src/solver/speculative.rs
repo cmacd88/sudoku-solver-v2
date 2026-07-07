@@ -31,7 +31,7 @@ impl Default for SpeculationConfig {
     fn default() -> Self {
         Self {
             enabled: true,
-            max_depth: 3,
+            max_depth: 100,
             mode: SpeculationMode::Hybrid,
             track_statistics: true,
         }
@@ -180,122 +180,118 @@ fn count_cells_with_n_candidates(board: &Board, n: usize) -> usize {
 
 /// Find the best cell for speculation using heuristics
 pub fn find_best_speculation_cell(board: &Board) -> Option<(usize, Vec<u8>)> {
-    let mut best_cell = None;
-    let mut best_score = f64::MIN;
-    
-    for cell_idx in 0..81 {
-        if board.is_cell_solved(cell_idx) {
-            continue;
+    let two_cand: Vec<usize> = (0..81)
+        .filter(|&i| !board.is_cell_solved(i)
+            && board.get_cell(i).map_or(false, |c| c.candidates.count() == 2))
+        .collect();
+
+    if !two_cand.is_empty() {
+        return best_by_cascade(board, &two_cand);
+    }
+
+    // fallback: any unsolved cell, still ranked by cascade
+    let any: Vec<usize> = (0..81).filter(|&i| !board.is_cell_solved(i)).collect();
+    if any.is_empty() { return None; }
+    best_by_cascade(board, &any)
+}
+
+fn best_by_cascade(board: &Board, cells: &[usize]) -> Option<(usize, Vec<u8>)> {
+    let mut best: Option<(usize, Vec<u8>, i32)> = None;
+
+    for &cell_idx in cells {
+        let candidates = board.get_cell(cell_idx)?.candidates.to_vec();
+        if candidates.is_empty() { return None; } // contradiction
+
+        let mut cascade_score = 0;
+        for &value in &candidates {
+            let mut sim = board.clone();
+            if sim.set_cell_value(cell_idx, value).is_err() { continue; }
+            let before = sim.solved_count();
+            let _ = propagate_all_constraints(&mut sim); // ignore contradiction here
+            cascade_score += sim.solved_count() as i32 - before as i32;
         }
-        
-        if let Some(cell) = board.get_cell(cell_idx) {
-            let candidate_count = cell.candidates.count();
-            
-            if candidate_count == 0 {
-                // Contradiction - no valid cell
-                return None;
-            }
-            
-            // Score based on candidate count (prefer 2-3 candidates)
-            let score = match candidate_count {
-                2 => 10.0,  // Best: binary choice
-                3 => 8.0,   // Good: ternary choice
-                4 => 5.0,   // Okay
-                _ => 1.0 / candidate_count as f64,  // Worse as count increases
-            };
-            
-            if score > best_score {
-                best_score = score;
-                best_cell = Some((cell_idx, cell.candidates.to_vec()));
-            }
+
+        if best.as_ref().map_or(true, |(_, _, s)| cascade_score > *s) {
+            best = Some((cell_idx, candidates, cascade_score));
         }
     }
-    
-    best_cell
+
+    best.map(|(idx, cands, _)| (idx, cands))
 }
 
 /// Solve using parallel speculation
 /// Note: This is a simplified version that explores branches in parallel
 /// For full integration with strategies, use sequential mode
+const MAX_NODES: usize = 200_000;
+
+enum NodeResult {
+    Solved(Board),
+    Dead,
+    Children(Vec<Board>),
+}
+
+/// Breadth-first parallel speculation. Expands one full layer at a time;
+/// dead branches are dropped, not carried forward. No depth limit —
+/// bounded only by total nodes explored.
 pub fn solve_parallel(
     board: &Board,
-    cell_idx: usize,
-    candidates: &[u8],
-    depth: usize,
-    max_depth: usize,
     stats: &mut SpeculationStatistics,
 ) -> SolverResult<Option<Board>> {
-    log::trace!("Parallel speculation at depth {} for cell {} with {} candidates",
-               depth, cell_idx, candidates.len());
-    
-    stats.branches_explored += candidates.len();
-    stats.max_depth_reached = stats.max_depth_reached.max(depth);
-    
-    // Try all candidates in parallel
-    let results: Vec<_> = candidates
-        .par_iter()
-        .map(|&value| {
-            log::trace!("Parallel branch: trying value {} at cell {}", value, cell_idx);
-            
-            // Clone board for this branch
-            let mut branch_board = board.clone();
-            
-            // Try setting the value
-            if branch_board.set_cell_value(cell_idx, value).is_err() {
-                return None;
-            }
-            
-            // Propagate constraints fully
-            if propagate_all_constraints(&mut branch_board).is_err() {
-                return None;
-            }
-            
-            // Check if solved
-            if branch_board.is_complete() {
-                return Some(branch_board);
-            }
-            
-            // Check if valid
-            if !branch_board.is_valid() {
-                return None;
-            }
-            
-            // If we haven't reached max depth, continue speculation
-            if depth < max_depth {
-                // Find next cell to speculate on
-                if let Some((next_cell, next_candidates)) = find_best_speculation_cell(&branch_board) {
-                    // Create a local stats for this branch (we can't share mutable stats across threads)
-                    let mut local_stats = SpeculationStatistics::new();
-                    
-                    if let Ok(Some(solved_board)) = solve_parallel(
-                        &branch_board,
-                        next_cell,
-                        &next_candidates,
-                        depth + 1,
-                        max_depth,
-                        &mut local_stats,
-                    ) {
-                        return Some(solved_board);
+    let mut frontier = vec![board.clone()];
+    let mut nodes_explored = 0usize;
+
+    while !frontier.is_empty() {
+        nodes_explored += frontier.len();
+        if nodes_explored > MAX_NODES {
+            return Err(SolverError::MaxIterationsReached);
+        }
+
+        let results: Vec<NodeResult> = frontier
+            .into_par_iter()
+            .map(|mut state| {
+                if propagate_all_constraints(&mut state).is_err() {
+                    return NodeResult::Dead;
+                }
+                if !state.is_valid() {
+                    return NodeResult::Dead;
+                }
+                if state.is_complete() {
+                    return NodeResult::Solved(state);
+                }
+                match find_best_speculation_cell(&state) {
+                    None => NodeResult::Dead,
+                    Some((cell_idx, candidates)) => {
+                        let children: Vec<Board> = candidates
+                            .iter()
+                            .filter_map(|&v| {
+                                let mut child = state.clone();
+                                child.set_cell_value(cell_idx, v).ok()?;
+                                Some(child)
+                            })
+                            .collect();
+                        NodeResult::Children(children)
                     }
                 }
+            })
+            .collect();
+
+        let mut next_frontier = Vec::new();
+        for r in results {
+            match r {
+                NodeResult::Solved(b) => return Ok(Some(b)),
+                NodeResult::Dead => stats.branches_pruned += 1,
+                NodeResult::Children(c) => {
+                    stats.branches_explored += c.len();
+                    next_frontier.extend(c);
+                }
             }
-            
-            None
-        })
-        .collect();
-    
-    // Find first successful result
-    for result in results {
-        if let Some(solved_board) = result {
-            return Ok(Some(solved_board));
-        } else {
-            stats.branches_pruned += 1;
         }
+        stats.max_depth_reached += 1;
+        frontier = next_frontier;
     }
-    
-    // No solution found in any branch
+
     stats.contradictions_found += 1;
-    Err(SolverError::NoSolution)
+    Ok(None)
 }
 
 /// Solve using sequential speculation (traditional backtracking with full propagation)
@@ -313,6 +309,7 @@ pub fn solve_sequential(
     stats.max_depth_reached = stats.max_depth_reached.max(depth);
     
     for &value in candidates {
+        eprintln!("DEBUG: trying value {} at cell {}", value, cell_idx);
         stats.branches_explored += 1;
         log::trace!("Sequential branch: trying value {} at cell {}", value, cell_idx);
         
@@ -451,37 +448,12 @@ pub fn solve_with_speculation(
             solve_sequential(board, cell_idx, &candidates, 0, config.max_depth, &mut stats)
         }
         SpeculationMode::Parallel | SpeculationMode::Hybrid => {
-            // For parallel modes, we need to handle the Option<Board> return
-            let strategy = if config.mode == SpeculationMode::Hybrid {
-                choose_speculation_strategy(board)
-            } else {
-                HybridStrategy::Bifurcation
-            };
-            
-            let (max_depth_to_use, _mode) = match strategy {
-                HybridStrategy::Bifurcation => {
-                    stats.record_mode_used(SpeculationMode::Parallel);
-                    (config.max_depth, SpeculationMode::Parallel)
-                }
-                HybridStrategy::Backtracking => {
-                    stats.record_mode_used(SpeculationMode::Sequential);
-                    return solve_sequential(board, cell_idx, &candidates, 0, config.max_depth, &mut stats);
-                }
-                HybridStrategy::LimitedBifurcation(depth) => {
-                    stats.record_mode_used(SpeculationMode::Parallel);
-                    (depth.min(config.max_depth), SpeculationMode::Parallel)
-                }
-            };
-            
-            match solve_parallel(board, cell_idx, &candidates, 0, max_depth_to_use, &mut stats) {
-                Ok(Some(solved_board)) => {
-                    *board = solved_board;
-                    Ok(())
-                }
-                Ok(None) => Err(SolverError::NoSolution),
-                Err(e) => Err(e),
-            }
-        }
+    match solve_parallel(board, &mut stats) {
+        Ok(Some(solved_board)) => { *board = solved_board; Ok(()) }
+        Ok(None) => Err(SolverError::NoSolution),
+        Err(e) => Err(e),
+    }
+    }
     };
 
     if config.track_statistics {

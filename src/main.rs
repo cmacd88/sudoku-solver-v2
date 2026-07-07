@@ -5,6 +5,7 @@ use std::env;
 use std::path::Path;
 
 fn main() {
+    env_logger::init();
     let args: Vec<String> = env::args().collect();
     
     if args.len() < 2 {
@@ -134,7 +135,7 @@ fn solve_puzzle(input: &str, speculation_config: SpeculationConfig) {
     
     match solver.solve(&mut board) {
         Ok(()) => {
-            if board.is_solved() {
+            if board.is_complete() {
                 println!("✓ Puzzle solved successfully!\n");
             } else {
                 println!("⚠ Partial solution (needs more advanced strategies or guessing)\n");
