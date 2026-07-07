@@ -2,6 +2,7 @@
 
 use sudoku_solver_v2::board::Board;
 use sudoku_solver_v2::solver::Solver;
+use sudoku_solver_v2::SpeculationConfig;
 
 #[test]
 fn test_invalid_length_too_short() {
@@ -163,12 +164,12 @@ fn test_hard_puzzle_partial_solve() {
     let mut board = result.unwrap();
     assert!(board.is_valid());
     
-    let mut solver = Solver::new();
-    let result = solver.solve(&mut board);
-    
     // Should not fully solve but should make some progress
+    let mut solver = Solver::new();
+    solver.set_speculation_config(SpeculationConfig { enabled: false, ..Default::default() });
+    let result = solver.solve(&mut board);
     assert!(result.is_ok());
-    assert!(!board.is_solved());
+    assert!(!board.is_complete());
     assert!(board.is_valid());
 }
 
