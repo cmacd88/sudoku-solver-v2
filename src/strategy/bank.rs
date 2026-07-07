@@ -8,6 +8,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 use thiserror::Error;
+use log;
 
 /// Errors that can occur when loading strategies
 #[derive(Debug, Error)]
@@ -59,13 +60,17 @@ impl StrategyBank {
         let mut bank = Self::new();
         
         let path = path.as_ref();
+        log::debug!("Loading strategies from directory: {}", path.display());
+        
         if !path.exists() {
+            log::error!("Strategy directory does not exist: {}", path.display());
             return Err(StrategyError::DirectoryReadError(
                 format!("Directory does not exist: {}", path.display())
             ));
         }
         
         if !path.is_dir() {
+            log::error!("Path is not a directory: {}", path.display());
             return Err(StrategyError::DirectoryReadError(
                 format!("Path is not a directory: {}", path.display())
             ));
@@ -73,11 +78,13 @@ impl StrategyBank {
         
         bank.load_directory_recursive(path)?;
         
+        log::info!("Successfully loaded {} strategies", bank.len());
         Ok(bank)
     }
     
     /// Recursively loads strategies from a directory
     fn load_directory_recursive(&mut self, path: &Path) -> Result<(), StrategyError> {
+        log::trace!("Scanning directory: {}", path.display());
         let entries = fs::read_dir(path)
             .map_err(|e| StrategyError::DirectoryReadError(e.to_string()))?;
         
@@ -92,12 +99,15 @@ impl StrategyBank {
                 self.load_directory_recursive(&path)?;
             } else if path.extension().and_then(|s| s.to_str()) == Some("json") {
                 // Load JSON files
+                log::trace!("Loading strategy file: {}", path.display());
                 match self.load_from_file(&path) {
                     Ok(_) => {
                         // Successfully loaded
+                        log::trace!("Successfully loaded strategy from {}", path.display());
                     }
                     Err(e) => {
                         // Log error but continue loading other files
+                        log::warn!("Failed to load strategy from {}: {}", path.display(), e);
                         eprintln!("Warning: Failed to load strategy from {}: {}", path.display(), e);
                     }
                 }
@@ -166,6 +176,9 @@ impl StrategyBank {
         let index = self.strategies.len();
         let name = strategy.metadata.name.clone();
         let difficulty = strategy.metadata.difficulty;
+        let priority = strategy.priority;
+        
+        log::debug!("Added strategy: {} (priority: {}, difficulty: {})", name, priority, difficulty);
         
         self.strategies.push(strategy);
         self.strategy_index.insert(name, index);

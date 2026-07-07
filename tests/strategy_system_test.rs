@@ -48,7 +48,7 @@ fn test_strategy_selection_by_priority() {
     
     // Propagate initial constraints
     use sudoku_solver_v2::solver::Solver;
-    let solver = Solver::new();
+    let mut solver = Solver::new();
     solver.propagate_initial_constraints(&mut board).unwrap();
     
     // Get all strategies
@@ -78,7 +78,7 @@ fn test_strategy_selection_by_difficulty() {
     
     // Propagate initial constraints
     use sudoku_solver_v2::solver::Solver;
-    let solver = Solver::new();
+    let mut solver = Solver::new();
     solver.propagate_initial_constraints(&mut board).unwrap();
     
     // Get all strategies
@@ -111,7 +111,7 @@ fn test_apply_strategy_match() {
     }
     
     // Propagate constraints
-    let solver = Solver::new();
+    let mut solver = Solver::new();
     solver.propagate_initial_constraints(&mut board).unwrap();
     
     // Get strategies
@@ -147,7 +147,7 @@ fn test_strategy_statistics() {
     let mut board = Board::from_string(puzzle).unwrap();
     
     // Propagate constraints
-    let solver = Solver::new();
+    let mut solver = Solver::new();
     solver.propagate_initial_constraints(&mut board).unwrap();
     
     // Get strategies

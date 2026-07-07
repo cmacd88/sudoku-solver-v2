@@ -3,6 +3,7 @@
 use sudoku_solver_v2::{Solver, SpeculationConfig, SpeculationMode, io};
 use std::env;
 use std::path::Path;
+use log::LevelFilter;
 
 fn main() {
     env_logger::init();
@@ -18,6 +19,12 @@ fn main() {
         print_usage();
         return;
     }
+    
+    // Parse command line arguments
+    let log_level = parse_log_level(&args);
+    let speculation_config = parse_speculation_config(&args);
+    
+    logging::init_logger_with_level(log_level);
     
     let command = &args[1];
     
@@ -93,6 +100,7 @@ fn solve_puzzle(input: &str, speculation_config: SpeculationConfig, verbosity: u
         match io::load_puzzle_from_file(Path::new(input)) {
             Ok(b) => b,
             Err(e) => {
+                log::error!("Error loading puzzle from file: {}", e);
                 eprintln!("Error loading puzzle from file: {}", e);
                 return;
             }
@@ -101,6 +109,7 @@ fn solve_puzzle(input: &str, speculation_config: SpeculationConfig, verbosity: u
         match io::load_puzzle_from_string(input) {
             Ok(b) => b,
             Err(e) => {
+                log::error!("Error parsing puzzle: {}", e);
                 eprintln!("Error parsing puzzle: {}", e);
                 return;
             }
@@ -139,6 +148,7 @@ fn solve_puzzle(input: &str, speculation_config: SpeculationConfig, verbosity: u
             s
         }
         Err(e) => {
+            log::warn!("Failed to load strategies: {}", e);
             eprintln!("⚠ Failed to load strategies: {}", e);
             eprintln!("Falling back to basic solver\n");
             Solver::new()
@@ -198,4 +208,5 @@ fn print_usage() {
     println!("  sudoku-solver-v2 solve puzzle.txt -s parallel -d 5");
     println!("  sudoku-solver-v2 solve puzzle.txt --no-speculation");
     println!("  sudoku-solver-v2 solve \"530070000600195000098000060800060003400803001700020006060000280000419005000080079\"");
+    println!("  RUST_LOG=trace sudoku-solver-v2 solve puzzle.txt");
 }
