@@ -1,0 +1,11 @@
+{
+  "name": "sudoku-solver-v2",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
+  "mounts": [
+    "source=${localWorkspaceFolder},target=/workspace,type=bind"
+  ],
+  "features": {
+    "ghcr.io/devcontainers/features/rust:1": {}
+  },
+  "workspaceFolder": "/workspace"
+}

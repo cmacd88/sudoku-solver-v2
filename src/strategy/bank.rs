@@ -321,7 +321,7 @@ mod tests {
 
     #[test]
     fn test_get_strategies_by_difficulty() {
-        let mut bank = StrategyBank::new();
+        let bank = StrategyBank::new();
         
         // We can't easily test this without creating actual strategy objects
         // This is a placeholder for when we have more strategies

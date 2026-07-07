@@ -12,4 +12,3 @@ pub mod logging;
 pub use board::Board;
 pub use solver::{Solver, SolverError, SolverResult};
 pub use solver::speculative::{SpeculationConfig, SpeculationMode, SpeculationStatistics};
-pub use logging::{Timer, SolverStats};

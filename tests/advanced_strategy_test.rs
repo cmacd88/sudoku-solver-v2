@@ -310,7 +310,7 @@ fn test_elimination_correctness() {
     let strategies = bank.get_all_strategies();
     
     // Apply one round of strategies
-    if let Some((strategy, matches)) = selector.select_strategy(&board, strategies) {
+    if let Some((_strategy, matches)) = selector.select_strategy(&board, strategies) {
         for strategy_match in matches {
             let _ = selector.apply_match(&mut board, &strategy_match);
         }
