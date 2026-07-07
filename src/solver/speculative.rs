@@ -309,7 +309,6 @@ pub fn solve_sequential(
     stats.max_depth_reached = stats.max_depth_reached.max(depth);
     
     for &value in candidates {
-        eprintln!("DEBUG: trying value {} at cell {}", value, cell_idx);
         stats.branches_explored += 1;
         log::trace!("Sequential branch: trying value {} at cell {}", value, cell_idx);
         
@@ -404,14 +403,14 @@ pub fn solve_with_speculation(
     // Find best cell for speculation
     let (cell_idx, candidates) = match find_best_speculation_cell(board) {
         Some(result) => {
-            eprintln!("DEBUG: Found speculation cell {} with {} candidates", result.0, result.1.len());
+            log::debug!("Found speculation cell {} with {} candidates", result.0, result.1.len());
             result
         }
         None => {
             // No valid cell found - either solved or contradiction
-            eprintln!("DEBUG: No speculation cell found. Solved: {}, Valid: {}", 
+            log::debug!("No speculation cell found. Solved: {}, Valid: {}", 
                      board.is_solved(), board.is_valid());
-            eprintln!("DEBUG: Unsolved count: {}", board.unsolved_count());
+            log::debug!("Unsolved count: {}", board.unsolved_count());
             
             // Check for cells with 0 candidates
             let mut zero_candidate_cells = Vec::new();
@@ -436,7 +435,7 @@ pub fn solve_with_speculation(
         }
     };
 
-    eprintln!("DEBUG: mode={:?}, cell={}, candidates={:?}", config.mode, cell_idx, candidates);
+    log::trace!("mode={:?}, cell={}, candidates={:?}", config.mode, cell_idx, candidates);
 
     // Choose strategy based on mode
     let result = match config.mode {
@@ -517,7 +516,7 @@ mod tests {
     fn test_speculation_config_default() {
         let config = SpeculationConfig::default();
         assert!(config.enabled);
-        assert_eq!(config.max_depth, 3);
+        assert_eq!(config.max_depth, 100);
         assert_eq!(config.mode, SpeculationMode::Hybrid);
         assert!(config.track_statistics);
     }

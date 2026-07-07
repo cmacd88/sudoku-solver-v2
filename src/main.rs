@@ -7,7 +7,13 @@ use std::path::Path;
 fn main() {
     env_logger::init();
     let args: Vec<String> = env::args().collect();
-    
+    let verbosity: u8 = args.iter().map(|a| match a.as_str() {
+        "-v" => 1,
+        "-vv" => 2,
+        "-vvv" => 3,
+        _ => 0,
+    }).sum();
+
     if args.len() < 2 {
         print_usage();
         return;
@@ -25,7 +31,7 @@ fn main() {
             
             let puzzle_input = &args[2];
             let config = parse_speculation_config(&args[3..]);
-            solve_puzzle(puzzle_input, config);
+            solve_puzzle(puzzle_input, config, verbosity);
         }
         "help" | "--help" | "-h" => {
             print_usage();
@@ -80,16 +86,12 @@ fn parse_speculation_config(args: &[String]) -> SpeculationConfig {
     config
 }
 
-fn solve_puzzle(input: &str, speculation_config: SpeculationConfig) {
+fn solve_puzzle(input: &str, speculation_config: SpeculationConfig, verbosity: u8) {
     println!("Sudoku Solver v2 - Advanced Strategy System\n");
-    
-    // Try to load puzzle from file first, then as string
+
     let mut board = if Path::new(input).exists() {
         match io::load_puzzle_from_file(Path::new(input)) {
-            Ok(b) => {
-                println!("Loaded puzzle from file: {}\n", input);
-                b
-            }
+            Ok(b) => b,
             Err(e) => {
                 eprintln!("Error loading puzzle from file: {}", e);
                 return;
@@ -97,32 +99,42 @@ fn solve_puzzle(input: &str, speculation_config: SpeculationConfig) {
         }
     } else {
         match io::load_puzzle_from_string(input) {
-            Ok(b) => {
-                println!("Loaded puzzle from string\n");
-                b
-            }
+            Ok(b) => b,
             Err(e) => {
                 eprintln!("Error parsing puzzle: {}", e);
                 return;
             }
         }
     };
-    
-    println!("Initial Board:");
-    println!("{}", board);
-    println!("{}\n", io::format_statistics(&board));
-    
-    // Solve the puzzle with strategy system and speculation
-    println!("Solving with advanced strategies...\n");
-    
+
+        if board.is_valid() {
+        if verbosity >= 1 {
+            println!("✓ Board is valid (no contradictions)\n");
+        }
+    } else {
+        println!("✗ Board has contradictions!\n");
+    }
+    if verbosity >= 2 {
+        println!("{}\n", io::format_statistics(&board));
+    }
+
+    if verbosity >= 1 {
+        println!("\n Initial Board:");
+        println!("{}", board);
+    }
+
+
     let mut solver = match Solver::with_speculation("strategies", speculation_config.clone()) {
         Ok(s) => {
-            println!("✓ Loaded strategy system");
-            if speculation_config.enabled {
-                println!("✓ Speculation enabled (mode: {:?}, depth: {})\n", 
-                    speculation_config.mode, speculation_config.max_depth);
-            } else {
-                println!("✓ Speculation disabled (using backtracking)\n");
+            if verbosity >= 2 {
+                println!("Solving with advanced strategies...\n"); //this should be loglevel 2
+                println!("✓ Loaded strategy system");
+                if speculation_config.enabled {
+                    println!("✓ Speculation enabled (mode: {:?}, depth: {})\n",
+                        speculation_config.mode, speculation_config.max_depth);
+                } else {
+                    println!("✓ Speculation disabled (using backtracking)\n");
+                }
             }
             s
         }
@@ -132,34 +144,40 @@ fn solve_puzzle(input: &str, speculation_config: SpeculationConfig) {
             Solver::new()
         }
     };
-    
-    match solver.solve(&mut board) {
+
+        let start = std::time::Instant::now();
+        let solve_result = solver.solve(&mut board);
+        let elapsed = start.elapsed();
+        
+        if verbosity >= 2 {
+            if let Some(stats) = solver.get_speculation_stats() {
+                println!("{}", stats);
+            }
+        }
+        match solve_result {
         Ok(()) => {
             if board.is_complete() {
-                println!("✓ Puzzle solved successfully!\n");
+                if verbosity >= 1 {
+                    println!("✓ Puzzle solved successfully!\n");
+                    println!("Time elapsed: {:?}\n", elapsed);
+                }
             } else {
-                println!("⚠ Partial solution (needs more advanced strategies or guessing)\n");
+                println!("⚠ Partial solution (needs more advanced strategies or guessing)");
             }
         }
         Err(e) => {
-            println!("✗ Solving failed: {}\n", e);
+            println!("✗ Solving failed: {}", e);
         }
     }
+
     
-    // Print speculation statistics if available
-    if let Some(stats) = solver.get_speculation_stats() {
-        println!("{}\n", stats);
-    }
-    
+    // Printing the final board.
     println!("Final Board:");
     println!("{}", board);
-    println!("{}\n", io::format_statistics(&board));
     
-    if board.is_valid() {
-        println!("✓ Board is valid (no contradictions)");
-    } else {
-        println!("✗ Board has contradictions!");
-    }
+    if verbosity >= 2 {
+        println!("{}\n", io::format_statistics(&board));
+    }    
 }
 
 fn print_usage() {

@@ -139,7 +139,7 @@ impl Solver {
             PropagationOutcome::Contradiction => Err(SolverError::NoSolution),
             PropagationOutcome::Stuck => {
                 if self.speculation_config.enabled {
-                    eprintln!("Speculation triggered: deterministic propagation stalled; branching search started.");
+                    log::info!("Speculation triggered: deterministic propagation stalled; branching search started.");
                     self.solve_with_speculation(board)
                 } else {
                     self.solve_with_backtracking(board)

@@ -1,89 +1,131 @@
-# Sudoku Solver v2 - MVP
+# Sudoku Solver v2 - v1.0
 
-A high-performance Sudoku solver written in Rust, featuring constraint propagation with zero-cost view abstractions.
+A Sudoku solver written in Rust, using constraint propagation, a JSON-driven strategy system, and breadth-first speculative search for puzzles that need guessing.
 
-**NB! I don't really know Rust as a language, so this is a way to test how well AI LLMs can implement my own ideas.
-This was vibe coded with blackbox ai, and currently is missing some features because I ran out of credits before I could have it implement everything.
-So far it covers a lot of puzzles, but gets very confused when there are multiple solutions to the same problem.**
+**NB! I don't really know Rust as a language — this project is a way to test how well AI/LLMs can implement my own ideas.** It was largely vibe-coded, then debugged and redesigned with help from Claude after early versions silently produced invalid solutions on hard puzzles.
+I started off with the idea of how the solver should work, but lacking the fluency in Rust to implement it.
+First drafting a crude design document, having AI iterate on it, then start writing code based on the design doc.
+First I used blackbox ai, but when that got stuck and burned through credits, then helped itself to to more by charging my card without asking me, I put a stop to that. Claude has helped me with the rest.
 
-## Features (MVP)
+## Features
 
-- ✅ **View Abstractions**: Zero-cost access to constraint groups (rows, columns, boxes)
-- ✅ **Constraint Propagation**: Efficient candidate elimination using pre-computed views
-- ✅ **Bitset Candidates**: Fast set operations using bitwise operations
-- ✅ **JSON Strategy System**: Load and apply strategies from JSON files
-- ✅ **Multiple Strategies**: Naked singles, hidden singles, naked pairs, pointing pairs
-- ✅ **Strategy Selection**: Multiple policies (Priority, Difficulty, FirstMatch)
-- ✅ **CLI Interface**: Simple command-line interface for solving puzzles
-- ✅ **Validation**: Detects contradictions and validates board state
-- ✅ **Comprehensive Testing**: 71 tests covering all functionality
+- **View Abstractions**: O(1) access to rows/columns/boxes via pre-computed indices
+- **Constraint Propagation**: Candidate elimination via peer views
+- **Bitset Candidates**: Fast set operations using bitwise ops (u16 per cell)
+- **JSON Strategy System**: Strategies defined in JSON, loaded at runtime, no code changes needed
+- **Strategies**: Naked singles, hidden singles, naked pairs, pointing pairs, X-Wing, Swordfish, XY-Wing
+- **Strategy Selection Policies**: Priority, Difficulty, FirstMatch
+- **Speculative Solving**: When deterministic strategies stall, breadth-first search tries candidate branches in parallel (via Rayon), dropping contradictions and requiring no depth limit — bounded only by a total-node safety cap
+- **Cascade Heuristic**: Speculation prefers cells with 2 candidates, then ranks by how many other cells a guess would cascade-solve
+- **Correctness Checks**: `is_valid()` (no duplicate values among filled cells) and `is_complete()` (fully filled *and* valid) — the latter is what the solver and CLI actually use to report success
+- **Tunable Logging**: Standard `log`/`env_logger`; set `RUST_LOG=info|debug|trace` for internal solving detail
+- **CLI Verbosity**: `-v` / `-vv` flags control how much is printed, independent of `RUST_LOG`
 
-## Architecture Highlights
+## Known Limitations
 
-### View Abstractions
-Instead of iterating over the entire board to find cells in a row, column, or box, we pre-compute indices and provide lightweight view objects. This enables:
-- **O(1) access** to constraint groups
-- **Direct peer access** for constraint propagation
-- **Zero runtime overhead** using Rust's lifetime system
-
-### Bitset Representation
-Each cell's candidates are stored as a bitset (u16), enabling:
-- Fast set operations (union, intersection, difference)
-- Efficient solved cell detection (popcount == 1)
-- Memory-efficient storage
+- Only supports 9x9 boards (hardcoded)
+- Test suite currently checks "made progress" / "board stays valid," not "matches a known correct solution" — a regression test comparing against a precomputed solved board is still on the to-do list
+- No test yet locks in the deep-speculation case (30+ level guessing) as a permanent regression check
 
 ## Installation
 
 ```bash
-# Clone the repository
 git clone <repo-url>
 cd sudoku-solver-v2
-
-# Build the project
 cargo build --release
 ```
 
 ## Usage
 
-### Solve from String
+### Solve from a string or file
 ```bash
 cargo run --release -- solve "530070000600195000098000060800060003400803001700020006060000280000419005000080079"
-```
-
-### Solve from File
-```bash
 cargo run --release -- solve puzzles/easy1.txt
 ```
 
-### Puzzle Format
-- 81 characters representing the 9x9 grid
-- Use `0` or `.` for empty cells
-- Use `1`-`9` for clues
-- Whitespace is ignored
+### Puzzle format
+81 characters, `0` or `.` for empty cells, `1`-`9` for clues. Whitespace ignored.
 
-Example:
+### Options
+| Flag | Effect |
+|---|---|
+| `-v` | Show initial board, elapsed solve time |
+| `-vv` | Also show strategy-loading detail and speculation statistics |
+| `-s, --speculation-mode <mode>` | `sequential`, `parallel`, or `hybrid` (default: `hybrid`) |
+| `-d, --speculation-depth <n>` | Depth cap for sequential mode (default: 100; the default `parallel`/`hybrid` search is depth-unlimited, bounded only by a total node cap) |
+| `--no-speculation` | Disable speculation, use plain backtracking instead |
+| `--no-stats` | Disable statistics tracking |
+
+### Fine-grained internal logging
+```bash
+RUST_LOG=debug cargo run --release -- solve puzzle.txt
+RUST_LOG=trace cargo run --release -- solve puzzle.txt   # per-branch detail
 ```
-530070000
-600195000
-098000060
-800060003
-400803001
-700020006
-060000280
-000419005
-000080079
+
+### Example (`-vv`, a puzzle requiring speculation)
+```
+Sudoku Solver v2 - Advanced Strategy System
+
+✓ Board is valid (no contradictions)
+
+Statistics:
+  Solved cells: 27/81
+  Unsolved cells: 54
+  Completion: 33.3%
+
+
+ Initial Board:
+. . . | . . . | 5 8 . 
+. 8 3 | . . 7 | . . . 
+2 . 9 | . . . | . 7 1 
+------+-------+------
+5 1 4 | 9 . . | . . . 
+. . . | . 1 . | . . . 
+. . . | . . 8 | 4 1 2 
+------+-------+------
+6 3 . | . . . | 8 . 5 
+. . . | 1 . . | 6 2 . 
+. 4 2 | . . . | . . . 
+
+Solving with advanced strategies...
+
+✓ Loaded strategy system
+✓ Speculation enabled (mode: Hybrid, depth: 100)
+
+Speculation Statistics:
+  Branches explored: 36
+  Branches pruned: 3
+  Max depth reached: 33
+  Contradictions found: 0
+
+✓ Puzzle solved successfully!
+
+Time elapsed: 6.809571ms
+
+Final Board:
+4 6 7 | 3 2 1 | 5 8 9 
+1 8 3 | 5 9 7 | 2 6 4 
+2 5 9 | 8 4 6 | 3 7 1 
+------+-------+------
+5 1 4 | 9 6 2 | 7 3 8 
+7 2 8 | 4 1 3 | 9 5 6 
+3 9 6 | 7 5 8 | 4 1 2 
+------+-------+------
+6 3 1 | 2 7 9 | 8 4 5 
+9 7 5 | 1 8 4 | 6 2 3 
+8 4 2 | 6 3 5 | 1 9 7 
+
+Statistics:
+  Solved cells: 81/81
+  Unsolved cells: 0
+  Completion: 100.0%
 ```
 
 ## Testing
 
 ```bash
-# Run all tests
-cargo test
-
-# Run with output
+cargo test               # all tests
 cargo test -- --nocapture
-
-# Run specific test
 cargo test test_solve_easy_puzzle_1
 ```
 
@@ -93,180 +135,42 @@ cargo test test_solve_easy_puzzle_1
 sudoku-solver-v2/
 ├── src/
 │   ├── main.rs              # CLI application
-│   ├── lib.rs               # Library root
+│   ├── lib.rs                # Library root
 │   ├── board/
-│   │   ├── mod.rs           # Board with pre-computed views
-│   │   ├── candidates.rs    # Bitset candidate operations
-│   │   └── views.rs         # View abstractions
+│   │   ├── mod.rs            # Board, is_valid()/is_complete(), row/col/box validation
+│   │   ├── candidates.rs     # Bitset candidate operations
+│   │   └── views.rs          # Row/column/box view abstractions
 │   ├── solver/
-│   │   └── mod.rs           # Constraint propagation solver
+│   │   ├── mod.rs            # Constraint propagation, strategy iteration, backtracking fallback
+│   │   └── speculative.rs    # Breadth-first speculation, cascade heuristic, statistics
 │   ├── strategy/
-│   │   ├── mod.rs           # Strategy system exports
-│   │   ├── types.rs         # Strategy type definitions
-│   │   ├── bank.rs          # Strategy loading and management
-│   │   ├── matcher.rs       # Pattern matching implementations
-│   │   └── selector.rs      # Strategy selection logic
+│   │   ├── mod.rs
+│   │   ├── types.rs
+│   │   ├── bank.rs            # Loads strategy JSON files
+│   │   ├── matcher.rs          # Pattern matchers (naked/hidden singles, pairs, X-Wing, Swordfish, XY-Wing)
+│   │   └── selector.rs         # Strategy selection + application
 │   └── io/
-│       └── mod.rs           # Puzzle loading and formatting
-├── strategies/              # JSON strategy definitions
-│   ├── README.md            # Strategy documentation
-│   ├── basic/
-│   │   ├── naked_single.json
-│   │   └── hidden_single.json
-│   └── intermediate/
-│       ├── naked_pair.json
-│       └── pointing_pair.json
+│       └── mod.rs
+├── strategies/                 # JSON strategy definitions (basic/, intermediate/)
 ├── tests/
-│   ├── integration_test.rs      # Integration tests
-│   ├── edge_cases_test.rs       # Edge case tests
-│   └── strategy_system_test.rs  # Strategy system tests
+│   ├── integration_test.rs
+│   ├── edge_cases_test.rs
+│   ├── strategy_system_test.rs
+│   ├── advanced_strategy_test.rs
+│   └── speculation_test.rs
 ├── puzzles/
-│   ├── easy1.txt
-│   ├── easy2.txt
-│   └── hard1.txt
 └── Cargo.toml
 ```
 
-## JSON Strategy System
+## How Speculation Works
 
-The solver now includes a flexible JSON-based strategy system that allows defining solving strategies in JSON files without code changes.
-
-### Strategy Files
-
-Strategies are organized in the `strategies/` directory:
-
-```
-strategies/
-├── basic/
-│   ├── naked_single.json      # Cells with one candidate
-│   └── hidden_single.json     # Values with one position
-└── intermediate/
-    ├── naked_pair.json        # Two cells, same two candidates
-    └── pointing_pair.json     # Candidates pointing to a line
-```
-
-### Using Strategies
-
-```rust
-use sudoku_solver_v2::strategy::{StrategyBank, StrategySelector, SelectionPolicy};
-
-// Load strategies from directory
-let bank = StrategyBank::load_from_directory("strategies")?;
-
-// Create a selector with a policy
-let mut selector = StrategySelector::new(SelectionPolicy::Priority);
-
-// Select and apply strategies
-if let Some((strategy, matches)) = selector.select_strategy(&board, bank.get_all_strategies()) {
-    for strategy_match in matches {
-        selector.apply_match(&mut board, &strategy_match)?;
-    }
-}
-
-// View statistics
-let stats = selector.statistics();
-println!("Total applications: {}", stats.total_applications());
-```
-
-### Adding New Strategies
-
-See `strategies/README.md` for detailed documentation on creating new strategy JSON files.
-
-## Current Limitations
-
-- Only supports 9x9 boards (hardcoded)
-- ~~No JSON strategy loading~~ ✅ **Implemented**
-- No logging system
-- No speculative execution for hard puzzles
-- Limited to basic/intermediate strategies (no X-Wing, Swordfish, etc. yet)
-
-## Future Enhancements
-
-1. **JSON Strategy System**: Load strategies dynamically from JSON files
-2. **Logging**: Comprehensive event logging for debugging and ML training
-3. **Multiple Board Sizes**: Support 6x6, 16x16, and other variants
-4. **Speculative Execution**: Parallel branch exploration for hard puzzles
-5. **Advanced Strategies**: X-Wing, Swordfish, XY-Wing, etc.
-6. **Performance Profiling**: Built-in profiler for strategy timing
-7. **Visualization**: Real-time solving visualization via event streaming
-8. **ML Integration**: Strategy selection using machine learning
-
-## Performance
-
-The MVP focuses on correctness and demonstrating the view abstraction concept. Performance optimizations include:
-- Pre-computed constraint graphs
-- Bitset operations for candidates
-- Zero-cost view abstractions
-- Early contradiction detection
-
-## Examples
-
-### Example 1: Easy Puzzle
-```bash
-$ cargo run --release -- solve puzzles/easy1.txt
-
-Sudoku Solver v2 - MVP
-
-Loaded puzzle from file: puzzles/easy1.txt
-
-Initial Board:
-5 3 . | . 7 . | . . . 
-6 . . | 1 9 5 | . . . 
-. 9 8 | . . . | . 6 . 
-------+-------+------
-8 . . | . 6 . | . . 3 
-4 . . | 8 . 3 | . . 1 
-7 . . | . 2 . | . . 6 
-------+-------+------
-. 6 . | . . . | 2 8 . 
-. . . | 4 1 9 | . . 5 
-. . . | . 8 . | . 7 9 
-
-Statistics:
-  Solved cells: 30/81
-  Unsolved cells: 51
-  Completion: 37.0%
-
-Solving...
-
-✓ Puzzle solved successfully!
-
-Final Board:
-5 3 4 | 6 7 8 | 9 1 2 
-6 7 2 | 1 9 5 | 3 4 8 
-1 9 8 | 3 4 2 | 5 6 7 
-------+-------+------
-8 5 9 | 7 6 1 | 4 2 3 
-4 2 6 | 8 5 3 | 7 9 1 
-7 1 3 | 9 2 4 | 8 5 6 
-------+-------+------
-9 6 1 | 5 3 7 | 2 8 4 
-2 8 7 | 4 1 9 | 6 3 5 
-3 4 5 | 2 8 6 | 1 7 9 
-
-Statistics:
-  Solved cells: 81/81
-  Unsolved cells: 0
-  Completion: 100.0%
-
-✓ Board is valid (no contradictions)
-```
-
-## Contributing
-
-This is an MVP demonstrating the core architecture. Future contributions will focus on:
-- Implementing the full strategy system
-- Adding comprehensive logging
-- Supporting multiple board sizes
-- Performance optimizations
+1. Solve deterministically (naked/hidden singles, pairs, X-Wing, etc.) until stuck.
+2. Pick a cell: prefer any with exactly 2 candidates; among candidates, rank by how many other cells a guess would cascade-solve (via a cheap simulate-and-propagate check).
+3. Try each candidate value as a branch, in parallel, one full layer at a time (breadth-first, not per-branch recursion).
+4. A branch that contradicts is dropped immediately, not carried forward.
+5. Repeat from step 1 within each surviving branch until one reaches a complete, valid board, or all branches are exhausted.
+6. No depth limit — the search naturally terminates because dead branches are pruned and the state space only shrinks. A large total-node cap exists purely as a runaway-bug safety valve, not a normal stopping condition.
 
 ## License
 
-MIT License (or your preferred license)
-
-## Acknowledgments
-
-Based on the architecture document that emphasizes:
-- Zero-cost view abstractions for efficient constraint access
-- Modular design with clear separation of concerns
-- Performance-focused implementation using Rust
+MIT

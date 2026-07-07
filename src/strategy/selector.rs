@@ -269,7 +269,7 @@ mod tests {
     use super::*;
     use crate::strategy::types::*;
 
-    fn create_test_strategy(name: &str, priority: u32, difficulty: u32) -> Strategy {
+    fn _create_test_strategy(name: &str, priority: u32, difficulty: u32) -> Strategy {
         Strategy {
             metadata: StrategyMetadata {
                 name: name.to_string(),
