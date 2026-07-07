@@ -228,6 +228,11 @@ impl Board {
     pub fn get_cell_constraints(&self, index: usize) -> Option<&CellConstraints> {
         self.cell_constraints.get(index)
     }
+
+    /// Checks if the board is completely and correctly solved
+    pub fn is_complete(&self) -> bool {
+        self.is_solved() && self.is_valid()
+    }
     
     /// Checks if a cell is solved
     pub fn is_cell_solved(&self, index: usize) -> bool {

@@ -45,6 +45,13 @@ pub struct Solver {
     speculation_stats: Option<SpeculationStatistics>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PropagationOutcome {
+    Solved,
+    Contradiction,
+    Stuck,
+}
+
 impl Solver {
     /// Creates a new solver with default settings (no strategy system)
     pub fn new() -> Self {
@@ -126,43 +133,69 @@ impl Solver {
         if !board.is_valid() {
             return Err(SolverError::InvalidBoard("Initial board state is invalid".to_string()));
         }
-        
-        // Initial constraint propagation from clues
-        self.propagate_initial_constraints(board)?;
-        
-        let mut iteration = 0;
-        
-        while !board.is_solved() && iteration < self.max_iterations {
-            iteration += 1;
-            
-            let progress = self.solve_iteration(board)?;
-            
-            if !progress {
-                // No progress made with logical strategies
-                // Try speculation/backtracking if we have strategies enabled
+
+        match self.propagate_until_stable(board)? {
+            PropagationOutcome::Solved => Ok(()),
+            PropagationOutcome::Contradiction => Err(SolverError::NoSolution),
+            PropagationOutcome::Stuck => {
                 if self.use_strategies {
                     if self.speculation_config.enabled {
-                        return self.solve_with_speculation(board);
+                        eprintln!("Speculation triggered: deterministic propagation stalled; branching search started.");
+                        self.solve_with_speculation(board)
                     } else {
-                        return self.solve_with_backtracking(board);
+                        self.solve_with_backtracking(board)
                     }
                 } else {
-                    // For basic solver, just stop here
-                    break;
+                    Ok(())
                 }
             }
         }
-        
-        if iteration >= self.max_iterations {
-            return Err(SolverError::MaxIterationsReached);
+    }
+
+    fn propagate_until_stable(&self, board: &mut Board) -> SolverResult<PropagationOutcome> {
+        self.propagate_initial_constraints(board)?;
+
+        if board.is_complete() {
+            return Ok(PropagationOutcome::Solved);
         }
-        
-        Ok(())
+
+        let mut iteration = 0;
+
+        while iteration < self.max_iterations {
+            iteration += 1;
+
+            if board.is_complete() {
+                return Ok(PropagationOutcome::Solved);
+            }
+
+            match self.solve_iteration(board) {
+                Ok(progress) => {
+                    if !progress {
+                        return Ok(PropagationOutcome::Stuck);
+                    }
+                }
+                Err(SolverError::NoSolution) => {
+                    return Ok(PropagationOutcome::Contradiction);
+                }
+                Err(err) => return Err(err),
+            }
+        }
+
+        Err(SolverError::MaxIterationsReached)
     }
     
     /// Solves using backtracking (depth-first search with constraint propagation)
     fn solve_with_backtracking(&self, board: &mut Board) -> SolverResult<()> {
-        // Find the cell with the fewest candidates (most constrained)
+        // First, try to propagate as far as we can
+        match self.propagate_until_stable(board)? {
+            PropagationOutcome::Solved => return Ok(()),
+            PropagationOutcome::Contradiction => return Err(SolverError::NoSolution),
+            PropagationOutcome::Stuck => {
+                // Propagation stalled; now we need to branch
+            }
+        }
+        
+        // Find the cell with fewest candidates
         let mut best_cell = None;
         let mut min_candidates = 10;
         
@@ -171,7 +204,6 @@ impl Solver {
                 if let Some(cell) = board.get_cell(cell_idx) {
                     let count = cell.candidates.count();
                     if count == 0 {
-                        // Contradiction found
                         return Err(SolverError::NoSolution);
                     }
                     if count < min_candidates {
@@ -182,56 +214,37 @@ impl Solver {
             }
         }
         
-        // If no unsolved cells, we're done
-        let cell_idx = match best_cell {
-            Some(idx) => idx,
-            None => return Ok(()), // Solved!
-        };
-        
-        // Get the candidates for this cell
+        let cell_idx = best_cell.ok_or(SolverError::NoSolution)?;
         let candidates = board.get_cell(cell_idx)
             .map(|c| c.candidates.to_vec())
             .unwrap_or_default();
         
-        // Try each candidate
         for &value in &candidates {
-            // Save the current board state
-            let saved_board = board.clone();
+            let mut child = board.clone();
             
-            // Try this value
-            if board.set_cell_value(cell_idx, value).is_ok() {
-                // Propagate constraints
-                let mut queue = std::collections::VecDeque::new();
+            if child.set_cell_value(cell_idx, value).is_ok() {
+                // Propagate immediately after setting the value
+                let mut queue = VecDeque::new();
                 queue.push_back(cell_idx);
                 
-                let propagation_result = {
-                    let mut temp_queue = queue.clone();
-                    self.propagate_cell_constraints(board, cell_idx, &mut temp_queue)
-                };
+                let propagation_ok = self.propagate_cell_constraints(&mut child, cell_idx, &mut queue).is_ok();
                 
-                if propagation_result.is_ok() && board.is_valid() {
-                    // Try to solve recursively
-                    match self.solve_with_backtracking(board) {
+                if propagation_ok && child.is_valid() {
+                    match self.solve_with_backtracking(&mut child) {
                         Ok(()) => {
-                            if board.is_solved() {
-                                return Ok(());
-                            }
+                            *board = child;
+                            return Ok(());
                         }
-                        Err(SolverError::NoSolution) => {
-                            // This branch failed, try next candidate
-                        }
+                        Err(SolverError::NoSolution) => continue,
                         Err(e) => return Err(e),
                     }
                 }
             }
-            
-            // Restore board state and try next candidate
-            *board = saved_board;
         }
         
-        // No candidate worked
         Err(SolverError::NoSolution)
     }
+
     
     /// Solves using the speculation system
     fn solve_with_speculation(&self, board: &mut Board) -> SolverResult<()> {

@@ -84,7 +84,7 @@ fn test_speculation_disabled() {
         track_statistics: false,
     };
     
-    let mut solver = Solver::with_speculation("strategies", config).unwrap();
+    let solver = Solver::with_speculation("strategies", config).unwrap();
     
     // Easy puzzle should still solve with speculation disabled
     let puzzle = "530070000600195000098000060800060003400803001700020006060000280000419005000080079";
@@ -104,7 +104,7 @@ fn test_easy_puzzle_with_sequential_speculation() {
         track_statistics: true,
     };
     
-    let mut solver = Solver::with_speculation("strategies", config).unwrap();
+    let solver = Solver::with_speculation("strategies", config).unwrap();
     
     let puzzle = "530070000600195000098000060800060003400803001700020006060000280000419005000080079";
     let mut board = Board::from_string(puzzle).unwrap();
@@ -123,7 +123,7 @@ fn test_easy_puzzle_with_parallel_speculation() {
         track_statistics: true,
     };
     
-    let mut solver = Solver::with_speculation("strategies", config).unwrap();
+    let solver = Solver::with_speculation("strategies", config).unwrap();
     
     let puzzle = "530070000600195000098000060800060003400803001700020006060000280000419005000080079";
     let mut board = Board::from_string(puzzle).unwrap();
@@ -142,7 +142,7 @@ fn test_easy_puzzle_with_hybrid_speculation() {
         track_statistics: true,
     };
     
-    let mut solver = Solver::with_speculation("strategies", config).unwrap();
+    let solver = Solver::with_speculation("strategies", config).unwrap();
     
     let puzzle = "530070000600195000098000060800060003400803001700020006060000280000419005000080079";
     let mut board = Board::from_string(puzzle).unwrap();
@@ -161,7 +161,7 @@ fn test_speculation_with_depth_1() {
         track_statistics: true,
     };
     
-    let mut solver = Solver::with_speculation("strategies", config).unwrap();
+    let solver = Solver::with_speculation("strategies", config).unwrap();
     
     // Easy puzzle should solve even with depth 1
     let puzzle = "530070000600195000098000060800060003400803001700020006060000280000419005000080079";
@@ -181,7 +181,7 @@ fn test_speculation_with_high_depth() {
         track_statistics: true,
     };
     
-    let mut solver = Solver::with_speculation("strategies", config).unwrap();
+    let solver = Solver::with_speculation("strategies", config).unwrap();
     
     let puzzle = "530070000600195000098000060800060003400803001700020006060000280000419005000080079";
     let mut board = Board::from_string(puzzle).unwrap();
@@ -200,7 +200,7 @@ fn test_speculation_with_already_solved_puzzle() {
         track_statistics: true,
     };
     
-    let mut solver = Solver::with_speculation("strategies", config).unwrap();
+    let solver = Solver::with_speculation("strategies", config).unwrap();
     
     // Fully solved puzzle
     let puzzle = "534678912672195348198342567859761423426853791713924856961537284287419635345286179";
@@ -222,7 +222,7 @@ fn test_speculation_with_invalid_puzzle() {
         track_statistics: true,
     };
     
-    let mut solver = Solver::with_speculation("strategies", config).unwrap();
+    let solver = Solver::with_speculation("strategies", config).unwrap();
     
     // Invalid puzzle (two 5s in first row)
     let puzzle = "550070000600195000098000060800060003400803001700020006060000280000419005000080079";
@@ -241,7 +241,7 @@ fn test_speculation_statistics_tracking() {
         track_statistics: true,
     };
     
-    let mut solver = Solver::with_speculation("strategies", config).unwrap();
+    let solver = Solver::with_speculation("strategies", config).unwrap();
     
     let puzzle = "530070000600195000098000060800060003400803001700020006060000280000419005000080079";
     let mut board = Board::from_string(puzzle).unwrap();
@@ -262,7 +262,7 @@ fn test_speculation_no_statistics_tracking() {
         track_statistics: false,
     };
     
-    let mut solver = Solver::with_speculation("strategies", config).unwrap();
+    let solver = Solver::with_speculation("strategies", config).unwrap();
     
     let puzzle = "530070000600195000098000060800060003400803001700020006060000280000419005000080079";
     let mut board = Board::from_string(puzzle).unwrap();
@@ -302,7 +302,7 @@ fn test_medium_puzzle_with_speculation() {
         track_statistics: true,
     };
     
-    let mut solver = Solver::with_speculation("strategies", config).unwrap();
+    let solver = Solver::with_speculation("strategies", config).unwrap();
     
     // Medium difficulty puzzle
     let puzzle = "003020600900305001001806400008102900700000008006708200002609500800203009005010300";
@@ -322,7 +322,7 @@ fn test_minimal_clue_puzzle() {
         track_statistics: true,
     };
     
-    let mut solver = Solver::with_speculation("strategies", config).unwrap();
+    let solver = Solver::with_speculation("strategies", config).unwrap();
     
     // Puzzle with minimal clues (17 is theoretical minimum for unique solution)
     let puzzle = "000000000000003085001020000000507000004000100090000000500000073002010000000040009";
@@ -342,7 +342,7 @@ fn test_empty_puzzle() {
         track_statistics: true,
     };
     
-    let mut solver = Solver::with_speculation("strategies", config).unwrap();
+    let solver = Solver::with_speculation("strategies", config).unwrap();
     
     // Empty puzzle (all zeros)
     let puzzle = "000000000000000000000000000000000000000000000000000000000000000000000000000000000";

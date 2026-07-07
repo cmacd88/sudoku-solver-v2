@@ -251,7 +251,7 @@ pub fn solve_parallel(
             }
             
             // Check if solved
-            if branch_board.is_solved() {
+            if branch_board.is_complete() {
                 return Some(branch_board);
             }
             
@@ -389,7 +389,7 @@ pub fn solve_with_speculation(
     let mut iteration = 0;
     let max_logical_iterations = 100;
     
-    while !board.is_solved() && iteration < max_logical_iterations {
+    while !board.is_complete() && iteration < max_logical_iterations {
         iteration += 1;
         
         // Try one iteration of logical solving
@@ -401,7 +401,7 @@ pub fn solve_with_speculation(
     }
     
     // If solved by logical strategies alone, we're done
-    if board.is_solved() {
+    if board.is_complete() {
         return Ok(());
     }
 
@@ -432,7 +432,7 @@ pub fn solve_with_speculation(
                 eprintln!("DEBUG: Cells with 0 candidates: {:?}", zero_candidate_cells);
             }
             
-            if board.is_solved() {
+            if board.is_complete() {
                 return Ok(());
             } else {
                 return Err(SolverError::NoSolution);
