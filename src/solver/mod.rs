@@ -282,17 +282,21 @@ impl Solver {
         if let Some((_strategy, matches)) = strategy_selector.select_strategy(board, strategies) {
             let mut progress = false;
             
-            // Apply all matches for this strategy
-            for strategy_match in matches {
-                match strategy_selector.apply_match(board, &strategy_match) {
-                    Ok(made_progress) => {
-                        progress |= made_progress;
-                    }
-                    Err(e) => {
-                        return Err(SolverError::InvalidBoard(format!("Failed to apply strategy: {}", e)));
+        for strategy_match in matches {
+            match strategy_selector.apply_match(board, &strategy_match) {
+                Ok(made_progress) => {
+                    progress |= made_progress;
+                    if let Some(cell_idx) = strategy_match.context.cell_to_set {
+                        let mut queue = std::collections::VecDeque::new();
+                        queue.push_back(cell_idx);
+                        while let Some(idx) = queue.pop_front() {
+                            self.propagate_cell_constraints(board, idx, &mut queue)?;
+                        }
                     }
                 }
+                Err(e) => return Err(SolverError::InvalidBoard(format!("Failed to apply strategy: {}", e))),
             }
+        }
             
             Ok(progress)
         } else {
